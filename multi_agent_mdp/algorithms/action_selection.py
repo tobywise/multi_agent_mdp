@@ -10,6 +10,8 @@ def check_q_values(qs):
         raise TypeError("Q values must be provided as a numpy array, got {0}".format(type(qs)))
     if not qs.ndim == 2:
         raise AttributeError("Q values must be 2-dimensional, of shape (n_states, n_actions)")
+    if np.all(np.isnan(qs)):
+        raise ValueError("All Q values are NaN")
 
 class ActionSelector(metaclass=ABCMeta):
     """
@@ -34,8 +36,16 @@ class ActionSelector(metaclass=ABCMeta):
         # Ensure q values are provided in the right format
         check_q_values(q_values)
 
+        nan_states = np.isnan(np.nanmean(q_values, axis=1))
+
+        q_values = q_values.copy()
+        q_values[np.isnan(q_values)] = 0
+
         # Get policy
         pi = self._get_pi(q_values=q_values, *args, **kwargs)
+
+        # Set actions to -1 for states where no action had non-NaN value
+        pi[nan_states] = -1
         
         # Check that the action selector returned the right format
         assert isinstance(pi, np.ndarray), "Action selector should return pi as a numpy array, got {0}".format(type(pi))
@@ -62,14 +72,22 @@ class ActionSelector(metaclass=ABCMeta):
         # Ensure q values are provided in the right format
         check_q_values(q_values)
 
+        nan_states = np.isnan(np.nanmean(q_values, axis=1))
+
+        q_values = q_values.copy()
+        q_values[np.isnan(q_values)] = 0
+
         # Get policy
         pi_p = self._get_pi_p(q_values=q_values, *args, **kwargs)
+
+        # Set actions to NaN for states where no action had non-NaN value
+        pi_p[nan_states, :] = np.nan
 
         # Check that the action selector returned the right format
         assert isinstance(pi_p, np.ndarray), "Action selector should return pi_p as a numpy array, got {0}".format(type(pi_p))
         assert pi_p.ndim == 2, "Returned pi_p must be 2-dimensional, of shape (n_states, n_actions)"
-        assert np.min(pi_p) >= 0, "Found action probabilities below 0"
-        assert np.max(pi_p) <= 1, "Found action probabilities greater than 1"
+        # assert np.min(pi_p) >= 0, "Found action probabilities below 0"
+        # assert np.max(pi_p) <= 1, "Found action probabilities greater than 1"
         assert pi_p.shape == q_values.shape, 'Pi_p must be the same shape as the Q values used as input, pi_p shape = {0}, ' \
                                              'Q values shape = {1}'.format(pi_p.shape, q_values.shape)
 
@@ -147,7 +165,7 @@ class MaxActionSelector(ActionSelector):
         Returns:
             np.ndarray: Action for each state, shape (n_states)
         """
-
+        # print(q_values)
         n_states, _ = self.get_nstates_actions(q_values)
 
         self._pi = np.zeros(n_states)

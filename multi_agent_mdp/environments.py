@@ -3,9 +3,9 @@ from multi_agent_mdp.plotting import plot_trajectory
 import numpy as np
 import json
 from .mdp import MDP
-from .agents import Agent, AttachedAgent
 from typing import List, Union, Tuple, Dict
 import matplotlib.pyplot as plt
+from fastprogress import progress_bar
 
 # TODO interactivity - adding features to represent other agents
 # TODO to_interactive_mdp - convert the environment to an interactive MDP
@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 class Environment():
 
-    def __init__(self, mdp:MDP, agents:Dict[Agent, Tuple[int, np.ndarray, List[int]]], name:str=''):
+    def __init__(self, mdp:MDP, agents:Dict['Agent', Tuple[int, np.ndarray, List[int]]], name:str=''):
         """
         Create and environment with multiple agents interacting with a common mdp.
 
@@ -49,7 +49,7 @@ class Environment():
     def agents(self):
         return self.__agents
 
-    def _set_mdp_and_agents(self, agents:Dict[Agent, Tuple[int, np.ndarray, List[int]]], mdp):
+    def _set_mdp_and_agents(self, agents:Dict['Agent', Tuple[int, np.ndarray, List[int]]], mdp):
 
         # Get number of agents
         self.n_agents = len(agents)
@@ -63,6 +63,8 @@ class Environment():
 
         # Attach agents
         self.__agents = {}
+
+        original_mdp_n_features = mdp.n_features
 
         for n, agent_object in enumerate(agents.keys()):
 
@@ -80,17 +82,18 @@ class Environment():
             if not isinstance(position, int):
                 raise TypeError('Agent {0}: Position should be an int'.format(agent_object.name))
 
-            if not len(reward_function) == mdp.n_features + self.n_agents:
+            if not len(reward_function) == original_mdp_n_features + self.n_agents:
                 raise AttributeError("Agent {0}: Agent reward function must have the same number of entries"
                                     "as the MDP has features plus number of agents. Reward function has {1} entries, "
                                     "MDP has {2} features, {3} agents provided".format(agent_object.name, len(reward_function), 
-                                    mdp.n_features, self.n_agents))
+                                    original_mdp_n_features, self.n_agents))
 
             if any([i > len(reward_function) - 1 for i in consumes]):
                 raise ValueError("Agent {0}: Provided a feature to consume that is out of range. Indexes provided = {1}, reward "
                                 "function indicates {2} features".format(agent_object.name, consumes, len(reward_function)))
             
-            agent_object = agent_object._attach(self.mdp, n, position, reward_function, consumes)
+            
+            agent_object = agent_object._attach(self.mdp, self, n, position, reward_function, consumes)
             self.__agents[agent_object.name] = agent_object
 
     def _check_agent_name(self, agent_name:str):
@@ -128,18 +131,28 @@ class Environment():
 
         self.n_steps += 1
 
-    def step_multi(self, agent_name:str, n_steps:int):
+    def step_multi(self, agent_name:str, n_steps:int, refit:bool=False, progressbar:bool=False):
         """
         Moves an agent multiple steps within the environment.
 
         Args:
             agent_name (str): Name of the agent to step.
-            n_steps (int): Number of steps to move
+            n_steps (int): Number of steps to move.
+            refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
+            which only estimate values for actions that can be taken from the current state, and would otherwise raise an error.
+            progressbar (bool, optional). If true, shows a progress bar.
         """
 
         self._check_agent_name(agent_name)
 
-        for _ in range(n_steps):
+        if progressbar:
+            steps = progress_bar(range(n_steps))
+        else:
+            steps = range(n_steps)
+
+        for _ in steps:
+            if refit:
+                self.fit(agent_name)
             self.step(agent_name)
 
     def reset(self):
@@ -161,7 +174,7 @@ class Environment():
         """
 
         self._check_agent_name(agent_name)
-        self.agents[agent_name].position(new_position)
+        self.agents[agent_name].position = new_position
 
     def get_agent_position_history(self, agent_name:str) -> List[int]:
         """

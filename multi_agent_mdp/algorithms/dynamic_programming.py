@@ -15,6 +15,11 @@ def get_state_action_values(s:int, n_actions:int, sas:np.ndarray, reward:np.ndar
     Calculates the value of each action for a given state. Used within the main value 
     iteration loop.
 
+    Reward is typically conceived of as resulting from taking action A in state S. Here, we for the sake
+    of simplicity, we assume that the reward results from visiting state S' - that is, taking action A in
+    state S isn't rewarding in itself, but the reward received is dependent on the reward present in state
+    S'.
+
     Args:
         s (int): State ID
         n_actions (int): Number of possible actions
@@ -22,6 +27,7 @@ def get_state_action_values(s:int, n_actions:int, sas:np.ndarray, reward:np.ndar
         reward (np.ndarray): Reward available at each state
         discount (float): Discount factor
         values (np.ndarray): Current estimate of value function
+
 
     Returns:
         np.ndarray: Estimated value of each state 
@@ -63,12 +69,15 @@ def delta_update(delta:float, old_v:float, new_v:float) -> float:
 
 @njit
 def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray, 
-                         discount:float, sas:np.ndarray) -> Tuple[np.ndarray, float, np.ndarray]:
+                         discount:float, sas:np.ndarray, soft=False) -> Tuple[np.ndarray, float, np.ndarray]:
     """
     Core value iteration function - calculates value function for the MDP and returns q-values for each action
     in each state.
 
     This function just runs one iteration of the value iteration algorithm.
+
+    "Soft" value iteration can optionally be performed. This essentially involves taking the softmax of action values
+    rather than the max, and is useful for inverse reinforcement learning (see Bloem & Bambos, 2014).
 
     Args:
         values (np.ndarray): Current estimate of the value function
@@ -76,6 +85,8 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
         reward (np.ndarray): Reward at each state (i.e. features x reward function)
         discount (float): Discount factor
         sas (np.ndarray): State, action, state transition function
+        soft (bool, optional): If True, this implements "soft" value iteration rather than standard
+        value iteration. Defaults to False.
 
     Returns:
         Tuple[np.ndarray, float, np.ndarray]: Returns new estimate of the value function, new delta, and new q_values
@@ -98,7 +109,12 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
         action_values = get_state_action_values(s, n_actions, sas, reward, discount, values)
 
         # Update action values
-        values[s] = action_values.max()
+        if not soft:
+            # Max
+            values[s] = action_values.max()
+        else:
+            # Softmax (e.g. Bloem & Bambos, 2014)
+            values[s] = np.log(np.sum(np.exp(action_values)))
 
         # Update Q value for each action in this state
         q_values[s, :] = action_values
@@ -111,7 +127,7 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
 
 @njit
 def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_iter:int, 
-                          discount:float, sas:np.ndarray, tol:float) -> Tuple[np.ndarray, np.ndarray]:
+                          discount:float, sas:np.ndarray, tol:float, soft=False) -> Tuple[np.ndarray, np.ndarray]:
     """
     Solves a given MDP using Value Iteration, given a certain reward function.
 
@@ -122,6 +138,8 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
         discount (float): Discount factor
         sas (np.ndarray): State, action, state transition function
         tol (float): Tolerance for convergence
+        soft (bool, optional): If True, this implements "soft" value iteration rather than standard
+        value iteration. Defaults to False.
 
     Returns:
         Tuple[np.ndarray, np.ndarray]: Returns the value function and Q values for each action in each state
@@ -143,12 +161,14 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
         # Delta checks for convergence
         delta_ = 0
 
-        values_, delta_, q_values_ = state_value_iterator(values_, delta_, reward_, discount, sas)
+        values_, delta_, q_values_ = state_value_iterator(values_, delta_, reward_, discount, sas, soft)
 
         if delta_ < tol:
             break
     
     return values_, q_values_
+
+
 
 
 class ValueIteration(Algorithm):
@@ -182,7 +202,7 @@ class ValueIteration(Algorithm):
         return values, q_values
 
 
-    def _fit(self, mdp:MDP, reward_function:np.ndarray) -> Union[np.ndarray, np.ndarray]:
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position) -> Union[np.ndarray, np.ndarray]:
         """
         Uses value iteration to solve the MDP
 
@@ -202,59 +222,4 @@ class ValueIteration(Algorithm):
 
 
 
-
-# class QValues():
-#     """ Class used to store Q values - subclasses numpy arrays, adding some useful methods"""
-
-
-#     # def set_state_values()
-
-class QValues(np.ndarray):
-    """ Class used to store Q values - subclasses numpy arrays, adding some useful methods"""
-
-    def __new__(cls, shape:Tuple[int], online:bool=False, current_state:int=None):
-        obj = np.ones(shape) * np.nan
-        obj = obj.view(cls)
-        obj.online = online
-        obj.current_state = current_state
-
-        return obj
-
-    def __array_finalize__(self, obj):
-        # Add attributes if necessary
-        if obj is None: return
-        self.online = getattr(obj, 'online', None)
-        self.current_state = getattr(obj, 'current_state', None)
-
-
-    def set_state_values(self, state:int, values:np.ndarray):
-
-        # Check state
-        if not isinstance(state, int):
-            raise TypeError("State must be an integer, given {0}".format(type(state)))
-
-        if state < 0:
-            raise ValueError("State must be positive")
-
-        if state > self.shape[0]:
-            raise ValueError("State {0} is not in the MDP".format(state))
-
-        # Check action values
-        if not isinstance(values, np.ndarray):
-            raise TypeError("Values must be supplied as a numpy array, got {0}".format(type(values)))
-
-        if not values.ndim == 1:
-            raise AttributeError("Values must be supplied as 1D array")
-
-        if not len(values) == self.shape[1]:
-            raise AttributeError("Values must be the same shape as the action space of the MDP. " 
-                                "Got {0} values, MDP has {1} actions available".format(len(values), self.shape[1]))
-
-        # If online, set everything to NaN except the current state
-        if self.online:
-            self[:, :] = np.nan
-            self[state, :] = values
-
-        else:
-            self[state, :] = values
 
