@@ -24,8 +24,6 @@ setup(
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3 :: Only',
     ],
-    package_dir={'': 'multi_agent_mdp'}, 
-    packages=find_packages(where='multi_agent_mdp'),  #
     python_requires='>=3.6, <4',
     install_requires=['numpy', 'numba', 'matplotlib', 'scipy', 'fastprogress'], 
     extras_require={  
