@@ -1,4 +1,14 @@
-language: ruby
-rvm:
- - 2.2
- - jruby
+language: python
+python:
+  - "3.4"
+  - "3.5"
+  - "3.6"      
+  - "3.7"
+  - "3.8"
+  - "3.9"
+# command to install dependencies
+install:
+  - pip install -r requirements.txt
+# command to run tests
+script:
+  - pytest
