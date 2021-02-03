@@ -1,17 +1,18 @@
 language: python
 python:
-  - "3.4"
-  - "3.5"
   - "3.6"      
   - "3.7"
   - "3.8"
   - "3.9"
 before_install:
-  - apt-get install llvm-3.9
-  - export LLVM_CONFIG=$(which llvm-config-3.9)
-# command to install dependencies
+  - wget http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - export PATH="$HOME/miniconda/bin:$PATH"
+  - conda update --yes conda
+  - conda create --yes --name testenv python=$TRAVIS_PYTHON_VERSION
+  - source activate testenv
 install:
-  - pip install -r requirements.txt
-# command to run tests
+  - python setup.py install
+  - conda install --yes pytest scikit-learn
 script:
-  - python -m pytest
+  - pytest

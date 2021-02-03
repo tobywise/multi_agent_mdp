@@ -30,9 +30,10 @@ def example_info_for_agent_values():
 
 @pytest.fixture
 def example_info_for_agent_consumes():
-    consumes_features = ((1, 3, 4), 
-                         (), 
-                         (0, 2))    
+    consumes_features = np.zeros((3, 5))
+    consumes_features[0, [1, 3, 4]] = 1
+    consumes_features[2, 2] = 1
+ 
     agent_idx = {2: 0, 3: 1, 4: 2}
     return consumes_features, agent_idx
 
