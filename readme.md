@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/tobywise/multi_agent_mdp.svg?branch=master)](https://travis-ci.com/tobywise/multi_agent_mdp.svg?branch=master) [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
+[![Build Status](https://travis-ci.com/tobywise/multi_agent_mdp.svg?branch=master)](https://travis-ci.com/tobywise/multi_agent_mdp) [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
 
 # Multi-agent MDPs 
 
