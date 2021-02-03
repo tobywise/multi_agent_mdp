@@ -25,6 +25,7 @@ class MDP():
 
         self.sas = sas
         self.features = features
+        self.__n_non_agent_features = features.shape[0]
         self.n_agents = 0
 
         # Set RNG

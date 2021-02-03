@@ -69,6 +69,7 @@ class AttachedAgent():
         self.algorithm = algorithm
         self.action_selector = action_selector
         self.agent_idx = index
+        self.agent_feature_idx = index + parent_mdp._MDP__n_non_agent_features  # Index of the corresponding feature for this agent
 
         self._parent_mdp = parent_mdp
         self._parent_environment = parent_environment
@@ -141,7 +142,6 @@ class AttachedAgent():
         # Get policy
         self.get_policy()
         
-
     def step(self):
 
         if not self.algorithm.fit_complete:
@@ -158,10 +158,6 @@ class AttachedAgent():
         self.position = int(next_state)
         self.position_history.append(self.position)
         self.__parent_mdp.update_agent_feature(self.agent_idx, self.position)
-
-
-        # TODO return observation?
-
 
     def reset(self):
         self.position = self.__starting_position

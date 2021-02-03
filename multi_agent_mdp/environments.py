@@ -6,11 +6,7 @@ from .mdp import MDP
 from typing import List, Union, Tuple, Dict
 import matplotlib.pyplot as plt
 from fastprogress import progress_bar
-
-# TODO interactivity - adding features to represent other agents
-# TODO to_interactive_mdp - convert the environment to an interactive MDP
-
-
+import warnings
 
 class Environment():
 
@@ -125,22 +121,45 @@ class Environment():
         self.agents[agent_name].step()
 
         # Consume features if necessary - i.e. set feature to zero
-        if len(self.agents[agent_name].consumes):
-            consumed = self.mdp.consume_features(self.agents[agent_name].consumes, self.agents[agent_name].position)
-            self.agents[agent_name].consumed += consumed  # Record consumption
+        self._consume_features(agent_name)
 
         self.n_steps += 1
 
-    def step_multi(self, agent_name:str, n_steps:int, refit:bool=False, progressbar:bool=False):
+    def _consume_features(self, agent_name:str):
+        """
+        Removes consumed features and keeps track of the number consumed.
+
+        Args:
+            agent_name (str): Agent to check feature consumption for.
+        """ 
+        
+        if len(self.agents[agent_name].consumes):
+            consumed = self.mdp.consume_features(self.agents[agent_name].consumes, self.agents[agent_name].position)
+            self.agents[agent_name].consumed += consumed  # Record consumption
+        
+    def _check_agents_caught(self, agent_name:str):
+
+        # Check whether any agents should be eaten
+        caught = False
+        for f in self.agents[agent_name].consumes:
+            for agent in self.agents.values():
+                if agent.agent_feature_idx == f:
+                    if self.agents[agent_name].position == agent.position:
+                        caught = True
+
+        return caught
+
+    def step_multi(self, agent_name:str, n_steps:int=10, refit:bool=False, progressbar:bool=False):
         """
         Moves an agent multiple steps within the environment.
 
         Args:
             agent_name (str): Name of the agent to step.
-            n_steps (int): Number of steps to move.
+            n_steps (int, optional): Number of steps to move. Defaults to 10.
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
-            which only estimate values for actions that can be taken from the current state, and would otherwise raise an error.
-            progressbar (bool, optional). If true, shows a progress bar.
+            which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
+            Defaults to False.
+            progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
         """
 
         self._check_agent_name(agent_name)
@@ -154,6 +173,43 @@ class Environment():
             if refit:
                 self.fit(agent_name)
             self.step(agent_name)
+
+    def step_multi_interactive(self, agent_names:List[str]=None, n_steps:int=10, refit:bool=False, progressbar:bool=False,
+                               stop_on_caught:bool=True):
+
+        """
+        Moves an agent multiple steps within the environment.
+
+        Args:
+            agent_names (List[str], optional): Names of agents to step. By default, includes every agent.
+            n_steps (int, optional): Number of steps to move. Defaults to 10.
+            refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
+            which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
+            Defaults to False.
+            progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
+            stop_on_caught (bool, optional): If true, stops moving agents when one of them gets caught.
+        """
+
+        if agent_names is None:
+            agent_names = self.agent_names
+
+        for agent_name in agent_names:
+            self._check_agent_name(agent_name)
+
+        if progressbar:
+            steps = progress_bar(range(n_steps))
+        else:
+            steps = range(n_steps)
+
+        for i in steps:
+            for agent_name in agent_names:
+                if refit:
+                    self.fit(agent_name)
+                self.step(agent_name)
+                caught = self._check_agents_caught(agent_name)
+                if caught and stop_on_caught:
+                    warnings.warn("Agent was caught, stopping")
+                    return
 
     def reset(self):
         """
