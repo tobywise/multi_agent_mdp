@@ -373,7 +373,7 @@ def get_agent_values(agents:List[int], agent_idx:Dict[int, str],
 
     return agent_values
 
-def get_agent_consumes(consumes_features:Tuple[Tuple[int]], agent_idx:Dict[int, str]):
+def get_agent_consumes(consumes_features:np.ndarray, agent_idx:Dict[int, str]):
     """ Determines which agents consume each other """
 
     n_agents = len(consumes_features)

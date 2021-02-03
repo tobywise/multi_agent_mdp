@@ -1,4 +1,4 @@
-from multi_agent_mdp.environments import Environment
+from maMDP.environments import Environment
 from .algorithms.dynamic_programming import ValueIteration
 from operator import pos
 import numpy as np

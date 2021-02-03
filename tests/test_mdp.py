@@ -1,5 +1,5 @@
 import pytest
-from multi_agent_mdp.mdp import *
+from maMDP.mdp import *
 
 @pytest.fixture
 def hexMDP_fixture():

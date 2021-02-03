@@ -15,4 +15,4 @@ install:
   - python setup.py install
   - conda install --yes pytest scikit-learn
 script:
-  - pytest
+  - python -m pytest

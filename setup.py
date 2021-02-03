@@ -7,7 +7,7 @@ here = pathlib.Path(__file__).parent.resolve()
 long_description = (here / 'readme.md').read_text(encoding='utf-8')
 
 setup(
-    name='multi_agent_mdp',  
+    name='maMDP',  
     version='0.1',  
     description='A package for multi-agent MDPs',  
     long_description=long_description,

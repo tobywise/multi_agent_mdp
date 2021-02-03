@@ -6,7 +6,7 @@ from scipy.optimize import minimize
 from numba import jit, njit, prange
 from typing import Union, Tuple
 from .base import Algorithm
-from multi_agent_mdp.mdp import MDP
+from maMDP.mdp import MDP
 
 @njit
 def get_state_action_values(s:int, n_actions:int, sas:np.ndarray, reward:np.ndarray, 

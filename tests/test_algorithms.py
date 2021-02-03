@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from multi_agent_mdp.algorithms.dynamic_programming import *
+from maMDP.algorithms.dynamic_programming import *
 
 @pytest.fixture
 def sas_fixture():

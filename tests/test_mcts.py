@@ -4,7 +4,7 @@ from numpy.lib.function_base import extract
 from numpy.lib.ufunclike import fix
 import pytest
 import numpy as np
-from multi_agent_mdp.algorithms.mcts import *
+from maMDP.algorithms.mcts import *
 
 @pytest.fixture
 def sas_fixture():

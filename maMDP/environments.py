@@ -1,5 +1,5 @@
 
-from multi_agent_mdp.plotting import plot_trajectory
+from maMDP.plotting import plot_trajectory
 import numpy as np
 import json
 from .mdp import MDP

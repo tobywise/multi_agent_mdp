@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from scipy.stats import mode
-from multi_agent_mdp.algorithms.action_selection import *
+from maMDP.algorithms.action_selection import *
 
 @pytest.fixture
 def q_values_fixture():

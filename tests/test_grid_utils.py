@@ -1,4 +1,4 @@
-from multi_agent_mdp.grid_utils import *
+from maMDP.grid_utils import *
 import pytest
 import numpy as np
 
