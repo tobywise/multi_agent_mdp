@@ -4,7 +4,7 @@ import pathlib
 here = pathlib.Path(__file__).parent.resolve()
 
 # Get the long description from the README file
-long_description = (here / 'README.md').read_text(encoding='utf-8')
+long_description = (here / 'readme.md').read_text(encoding='utf-8')
 
 setup(
     name='multi_agent_mdp',  
