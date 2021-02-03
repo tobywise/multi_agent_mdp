@@ -4,38 +4,32 @@ from maMDP.mdp import *
 @pytest.fixture
 def hexMDP_fixture():
     """ Creates a hex grid MDP with 20 states (5x4), 3 features """
-    return HexGridMDP(np.ones((3, 20)), shape=(5, 4), 
-                      feature_names=['feature_A', 'feature_B', 'feature_C'], self_transitions=False)
+    return HexGridMDP(np.ones((3, 20)), shape=(5, 4), self_transitions=False)
 
 @pytest.fixture
 def squareMDP_fixture():
     """ Creates a hex grid MDP with 20 states (5x4), 3 features """
-    return SquareGridMDP(np.ones((3, 20)), shape=(5, 4), 
-                         feature_names=['feature_A', 'feature_B', 'feature_C'], self_transitions=False)
+    return SquareGridMDP(np.ones((3, 20)), shape=(5, 4), self_transitions=False)
 
 @pytest.fixture
 def hexMDP_fixture_self_transitions():
     """ Creates a hex grid MDP with 20 states (5x4), 3 features, with self-transitions """
-    return HexGridMDP(np.ones((3, 20)), shape=(5, 4), 
-                      feature_names=['feature_A', 'feature_B', 'feature_C'], self_transitions=True)
+    return HexGridMDP(np.ones((3, 20)), shape=(5, 4), self_transitions=True)
 
 @pytest.fixture
 def squareMDP_fixture_self_transitions():
     """ Creates a square grid MDP with 20 states (5x4), 3 features, with self-transitions """
-    return SquareGridMDP(np.ones((3, 20)), shape=(5, 4), 
-                         feature_names=['feature_A', 'feature_B', 'feature_C'], self_transitions=True)
+    return SquareGridMDP(np.ones((3, 20)), shape=(5, 4), self_transitions=True)
 
 @pytest.fixture
 def small_hexMDP_fixture():
     """ Creates a small (2x2) hex MDP"""
-    return HexGridMDP(np.ones((3, 4)), shape=(2, 2), 
-                    feature_names=['feature_A', 'feature_B', 'feature_C'], self_transitions=False)
+    return HexGridMDP(np.ones((3, 4)), shape=(2, 2), self_transitions=False)
 
 @pytest.fixture
 def small_squareMDP_fixture():
     """ Creates a small (2x2) square MDP"""
-    return SquareGridMDP(np.ones((3, 4)), shape=(2, 2), 
-                    feature_names=['feature_A', 'feature_B', 'feature_C'], self_transitions=False)
+    return SquareGridMDP(np.ones((3, 4)), shape=(2, 2), self_transitions=False)
 
 
 def test_hexgrid_sas_n_states(hexMDP_fixture):
