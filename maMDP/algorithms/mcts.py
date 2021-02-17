@@ -495,11 +495,29 @@ def solve_all_value_iteration(sas, predator_reward_function, features, prey_inde
 
 
 class MCTS(Algorithm):
+    """
+    Implements Monte Carlo Tree Search, with optional interactivity (i.e. accounting for other agents' actions).
+    """
 
     def __init__(self, n_iter:int=1000, n_steps:int=30, C:float=1, caught_cost:float=-50, 
                  interactive:bool=False, opponent_policy_method:str='solve', 
                  opponent_action_selection:str='max', softmax_temperature:float=1, caching:bool=False, reset_cache:bool=False,
                  VI_kwargs:Dict={}):
+        """[summary]
+
+        Args:
+            n_iter (int, optional): [description]. Defaults to 1000.
+            n_steps (int, optional): [description]. Defaults to 30.
+            C (float, optional): [description]. Defaults to 1.
+            caught_cost (float, optional): [description]. Defaults to -50.
+            interactive (bool, optional): [description]. Defaults to False.
+            opponent_policy_method (str, optional): [description]. Defaults to 'solve'.
+            opponent_action_selection (str, optional): [description]. Defaults to 'max'.
+            softmax_temperature (float, optional): [description]. Defaults to 1.
+            caching (bool, optional): [description]. Defaults to False.
+            reset_cache (bool, optional): [description]. Defaults to False.
+            VI_kwargs (Dict, optional): [description]. Defaults to {}.
+        """
 
         self.n_iter = n_iter
         self.n_steps = n_steps

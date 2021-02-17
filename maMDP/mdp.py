@@ -9,8 +9,11 @@ import matplotlib.pyplot as plt
 # TODO add something to convert MDP SAS to generator for use with MCTS
 
 class MDP():
+    """
+    Represents a fully observable MDP.
+    """
 
-    def __init__(self, features:np.ndarray, sas:np.ndarray, seed=None):
+    def __init__(self, features:np.ndarray, sas:np.ndarray, walls:np.ndarray=None, seed:int=None):
         """
         Base class representing a Markov Decision Process (MDP) with features. Each state can have multiple features.
 
@@ -19,14 +22,22 @@ class MDP():
         Args:
             features (np.ndarray): Array of features in each state, shape (n_features, n_states)
             sas (np.ndarray): Array representing the probability of transitioning from state S to state S' given action A. Of shape (states, actions, states). 
+            walls (np.ndarray, optional): An array specifying the location of walls in the grid. Defaults to None.
             seed (int, optional): RNG seed. Defaults to None.
         """
 
 
         self.sas = sas
+        self.__original_sas = sas.copy()  # Save in case we need to reset
         self.features = features
         self.__n_non_agent_features = features.shape[0]
         self.n_agents = 0
+
+        # Add walls
+        if walls is not None:
+            self.walls = walls
+        else:
+            self.walls = np.zeros(self.sas.shape[0])
 
         # Set RNG
         if seed is not None:
@@ -90,6 +101,46 @@ class MDP():
         # Name features
         self.feature_names = ['Feature_{0}'.format(i) for i in range(self.n_features)]
 
+    @property
+    def walls(self):
+        return self.__walls
+
+    @walls.setter
+    def walls(self, walls):
+        """
+        Adds walls to the MDP. A wall represents a state that cannot be transitioned into or out of.
+
+        Args:
+            walls: Specification of walls. By default, this will be a 1D array identifying walled states. However,
+            it can be provided in any format provided the _get_walls() method is implemented to translate this into
+            a 1D array of walled states.
+        """
+
+        # Get walls
+        walls = self._get_walls(walls)
+
+        # Check shape etc
+        if not walls.ndim == 1:
+            raise AttributeError("Array specifying walls must be 1 dimensional")
+        if not walls.shape == np.product(self.shape):
+            raise AttributeError("Walls array must have the same number of entries as the number of states. Expected {0}, "
+                                "got {1}".format(self.sas.shape[0], walls.shape))
+        if not np.all(np.isin(walls, [0, 1])):
+            raise ValueError("Wall array values must be either 0 (no wall) or 1 (wall)")
+
+        # Reset SAS
+        self.sas = self.__original_sas.copy()
+
+        # Add array
+        self.__walls = walls
+
+        # Adjust SAS
+        self.sas[:, :, walls == 1] = 0 # Make it impossible to transition to these states
+        self.sas[walls == 1, :, :] = 0 # Make it impossible to transition from these states
+
+    def _get_walls(self, walls):
+        return walls
+
     def add_agent_feature(self, position:int):
         """
         Add feature representing an agent present in the environment.
@@ -125,9 +176,7 @@ class MDP():
         """ Removes agent features """
 
         self.features = self.features[:-self.n_agents, :]
-
         self.n_agents = 0
-
 
     def consume_features(self, feature_idx:List[int], state_id:int) -> np.ndarray:
         """
@@ -173,7 +222,6 @@ class MDP():
             next_state = self.rng.random.choice(np.arange(len(possible_states), dtype=np.int), p=possible_states)
 
         return next_state
-
 
     def _trajectory_to_state_action(self, trajectory:list) -> np.ndarray:
         """
@@ -250,7 +298,7 @@ class MDP():
 
 class GridMDP(MDP, metaclass=ABCMeta):
 
-    def __init__(self, features:np.ndarray, shape:tuple=(10, 15), self_transitions:bool=False):
+    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False):
         """
         Creates a deterministic MDP representing a hexagonal grid with a given shape. Uses offset coordinates ("odd-q").
 
@@ -258,6 +306,7 @@ class GridMDP(MDP, metaclass=ABCMeta):
 
         Args:
             features (np.ndarray): Array of features in each state, shape (n_features, n_states)
+            walls (np.ndarray, optional): 1D array specifying wallled states. Defaults to None.
             shape (tuple, optional): shape of the grid, width by height. Defaults to (10, 15).
             self_transitions (bool, optional): Whether to allow . Defaults to True.
         """
@@ -280,7 +329,7 @@ class GridMDP(MDP, metaclass=ABCMeta):
             raise AttributeError("Number of states on first dimension must equal number of"
                                  "states in last dimension. Got {0} and {1}".format(sas.shape[0], sas.shape[1]))
 
-        super().__init__(features, sas)
+        super().__init__(features, sas, walls)
 
     @abstractmethod
     def _get_sas(self) -> np.ndarray:
@@ -299,17 +348,16 @@ class GridMDP(MDP, metaclass=ABCMeta):
         return self.grid_coords[state, :]
 
     def flat_to_grid(self, values:np.ndarray) -> np.ndarray:
-        return values.reshape((self.shape), order='F')
+        return values.reshape((self.shape), order='C')
 
     def features_as_grid(self) -> np.ndarray:
-        return self.features.reshape(((self.n_features, ) +  self.shape), order='F')
+        return self.features.reshape(((self.n_features, ) +  self.shape), order='C')
 
     def state_to_idx(self, state:int):
         return np.unravel_index(state, self.shape)
 
     def idx_to_state(self, idx):
         return np.ravel_multi_index(idx, self.shape)
-
 
     def plot_trajectory(self, trajectory:List[int], ax:plt.axes, colour:str='black', 
                         head_width:int=0.3, head_length:int=0.3, *args, **kwargs) -> plt.axes:
@@ -338,17 +386,18 @@ class GridMDP(MDP, metaclass=ABCMeta):
 
 class SquareGridMDP(GridMDP):
 
-    def __init__(self, features:np.ndarray, shape:tuple=(10, 15), self_transitions:bool=False):
+    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False):
         """
         Creates a deterministic MDP representing a hexagonal grid with a given shape. Uses offset coordinates ("odd-q").
 
         Args:
             features (np.ndarray): Array of features in each state, shape (n_features, n_states)
+            walls (np.ndarray, optional): 1D array specifying wallled states. Defaults to None.
             shape (tuple, optional): Shape of the grid, width by height. Defaults to (10, 15).
             self_transitions (bool, optional): Whether to allow . Defaults to True.
         """
 
-        super().__init__(features=features, shape=shape, self_transitions=self_transitions)
+        super().__init__(features=features, walls=walls, shape=shape, self_transitions=self_transitions)
 
     def _get_sas(self):
 
@@ -374,19 +423,24 @@ class SquareGridMDP(GridMDP):
 
         return sas
 
-    def plot(self, colours:list=None, alphas:list=None, *args, **kwargs) -> plt.axes:
+    def plot(self, colours:list=None, alphas:list=None, wall_colour:str='#595959', *args, **kwargs) -> plt.axes:
         """
         Plots the MDP, showing each feature.
 
         Args:
             colours (list, optional): Colours to use for each feature. Defaults to None.
             alphas (list, optional): Alpha value of each feature. Defaults to None.
+            wall_colour (str, optional): Colour of walls.
 
         Returns:
             plt.axes: Axes
         """
 
+        # Plot features
         ax = plot_grids(self.features_as_grid()[:-self.n_agents, :], colours, alphas, *args, **kwargs)
+
+        # Plot walls
+        ax = plot_grids(self.flat_to_grid(self.walls)[None, :], [wall_colour], [1], ax=ax)
 
         return ax
 
@@ -443,17 +497,18 @@ class SquareGridMDP(GridMDP):
     
 class HexGridMDP(GridMDP):
 
-    def __init__(self, features:np.ndarray, shape:tuple=(10, 15), self_transitions:bool=False):
+    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False):
         """
         Creates a deterministic MDP representing a hexagonal grid with a given shape. Uses offset coordinates ("odd-q").
 
         Args:
-            features (np.ndarray): Array of features in each state, shape (n_features, n_states)
+            features (np.ndarray): Array of features in each state, shape (n_features, n_states).
+            walls (np.ndarray, optional): 1D array specifying wallled states. Defaults to None.
             shape (tuple, optional): Shape of the grid, width by height. Defaults to (10, 15).
             self_transitions (bool, optional): Whether to allow . Defaults to True.
         """
 
-        super().__init__(features=features, shape=shape, self_transitions=self_transitions)
+        super().__init__(features=features, walls=walls, shape=shape, self_transitions=self_transitions)
 
     def _get_sas(self):
 
@@ -463,7 +518,7 @@ class HexGridMDP(GridMDP):
 
         # Get adjacency matrix
         _, grid_idx = grid_coords(self.grid)
-        adjacency = square_adjacency(grid_idx)
+        adjacency = hex_adjacency(grid_idx)
         n_states = np.product(self.grid.shape)
 
         # Loop over state pairs to get state-action-state info
@@ -479,19 +534,23 @@ class HexGridMDP(GridMDP):
 
         return sas
 
-    def plot(self, colours:list=None, alphas:list=None, *args, **kwargs) -> plt.axes:
+    def plot(self, colours:list=None, alphas:list=None, wall_colour:str='#595959', *args, **kwargs) -> plt.axes:
         """
         Plots the MDP, showing each feature.
 
         Args:
             colours (list, optional): Colours to use for each feature. Defaults to None.
             alphas (list, optional): Alpha value of each feature. Defaults to None.
+            wall_colour (str, optional): Colour of walls.
 
         Returns:
             plt.axes: Axes
         """
 
         ax, self.coords = plot_hex_grids(self.features_as_grid()[:-self.n_agents, :], colours, alphas, *args, **kwargs)
+
+        # Plot walls
+        ax, _ = plot_hex_grids(self.flat_to_grid(self.walls)[None, :], [wall_colour], [1], ax=ax)
 
         return ax
 
@@ -502,7 +561,7 @@ class HexGridMDP(GridMDP):
         
         return idx
 
-    def plot_state_values(self, values, cmap='viridis', *args, **kwargs) -> plt.axes:
+    def plot_state_values(self, values, cmap='viridis',  *args, **kwargs) -> plt.axes:
         """
         Plots continuous values for all states within the MDP.
 

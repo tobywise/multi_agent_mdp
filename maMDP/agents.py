@@ -44,6 +44,10 @@ class Agent():
         self.algorithm = algorithm(**algorithm_kwargs)
         self.action_selector = action_selector(**action_kwargs)
 
+        # Retain these for use later
+        self.algorithm_kwargs = algorithm_kwargs
+        self.action_kwargs = action_kwargs
+
         self.name = name
         self.n_moves = n_moves
 
@@ -51,7 +55,8 @@ class Agent():
 
         return AttachedAgent(name=self.name, n_moves=self.n_moves, reward_function=reward_function, consumes=consumes,
                              algorithm=self.algorithm, action_selector=self.action_selector, 
-                             parent_mdp=mdp, parent_environment=env, position=position, index=index)
+                             parent_mdp=mdp, parent_environment=env, position=position, index=index,
+                             algorithm_kwargs=self.algorithm_kwargs, action_kwargs=self.action_kwargs)
 
 
 class AttachedAgent():
@@ -59,15 +64,20 @@ class AttachedAgent():
 
     def __init__(self, name: str, n_moves:int, reward_function:np.ndarray, consumes:List[int],
                 algorithm: Algorithm, action_selector: ActionSelector, 
-                parent_mdp:MDP, parent_environment:Environment, position:int, index:int):
+                parent_mdp:MDP, parent_environment:Environment, position:int, index:int,
+                algorithm_kwargs:Dict, action_kwargs:Dict):
        
         self.name = name
         self.n_moves = n_moves
         self.reward_function = reward_function
         self.consumes = consumes
         self.consumed = np.zeros(len(reward_function))
+
         self.algorithm = algorithm
         self.action_selector = action_selector
+        self.algorithm_kwargs = algorithm_kwargs
+        self.action_kwargs = action_kwargs
+
         self.agent_idx = index
         self.agent_feature_idx = index + parent_mdp._MDP__n_non_agent_features  # Index of the corresponding feature for this agent
 

@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from fastprogress import progress_bar
 import warnings
 
+
+
 class Environment():
 
     def __init__(self, mdp:MDP, agents:Dict['Agent', Tuple[int, np.ndarray, List[int]]], name:str=''):
@@ -109,12 +111,15 @@ class Environment():
         self._check_agent_name(agent_name)
         self.agents[agent_name].fit()
 
-    def step(self, agent_name:str):
+    def step(self, agent_name:str) -> int:
         """
         Moves a given agent one step in the environment.
 
         Args:
             agent_name (str): Name of the agent to step.
+
+        Returns:
+            int: New position
         """
 
         self._check_agent_name(agent_name)
@@ -124,6 +129,8 @@ class Environment():
         self._consume_features(agent_name)
 
         self.n_steps += 1
+
+        return self.agents[agent_name].position
 
     def _consume_features(self, agent_name:str):
         """
@@ -149,34 +156,44 @@ class Environment():
 
         return caught
 
-    def step_multi(self, agent_name:str, n_steps:int=10, refit:bool=False, progressbar:bool=False):
+    def step_multi(self, agent_name:str, n_steps:int=None, refit:bool=False, progressbar:bool=False) -> List[int]:
         """
         Moves an agent multiple steps within the environment.
 
         Args:
             agent_name (str): Name of the agent to step.
-            n_steps (int, optional): Number of steps to move. Defaults to 10.
+            n_steps (int, optional): Number of steps to move. If None, uses the agent's n_moves attribute. Defaults to None.
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
             Defaults to False.
             progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
+
+        Returns:
+            List[int]: States the agent has moved to.
         """
 
         self._check_agent_name(agent_name)
+
+        if n_steps is None:
+            n_steps = self.agents[agent_name].n_moves
 
         if progressbar:
             steps = progress_bar(range(n_steps))
         else:
             steps = range(n_steps)
 
+        positions = []
+
         for _ in steps:
             if refit:
                 self.fit(agent_name)
             self.step(agent_name)
+            positions.append(self.agents[agent_name].position)
+        
+        return positions
 
     def step_multi_interactive(self, agent_names:List[str]=None, n_steps:int=10, refit:bool=False, progressbar:bool=False,
                                stop_on_caught:bool=True):
-
         """
         Moves an agent multiple steps within the environment.
 

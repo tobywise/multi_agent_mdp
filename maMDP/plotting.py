@@ -11,13 +11,14 @@ def normalise(x):
 
 # SQUARE GRID PLOTTING FUNCTIONS
 
-def plot_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None, *args, **kwargs):
+def plot_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None, ax:plt.axes=None, *args, **kwargs) -> plt.axes:
     """
     Plots multiple grids
 
     Args:
         grids (np.ndarray): 3D array of grids. The first dimension represents the grid number, the
         second and third dimensions are the X and Y dimensions of each grid
+        ax (plt.axes): Axes to use for plotting.
         colours (list, optional): Colour to use for each grid. Defaults to None.
 
     """
@@ -25,7 +26,8 @@ def plot_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None
     if not grids.ndim == 3:
         raise AttributeError("Grids must be supplied as a 3D numpy array, (n_grids, Xdim, Ydim)")
 
-    f, ax = plt.subplots(*args, **kwargs)
+    if ax is None:
+        _, ax = plt.subplots(*args, **kwargs)
 
     # Plot each grid
     for grid in range(grids.shape[0]):
@@ -36,15 +38,15 @@ def plot_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None
 
         # Get colours - alpha depends on intensity of feature
         cmap = colors.LinearSegmentedColormap.from_list('singleColour', [colour, colour], N=2)  # Single colour colormap
-        colour_array = colors.Normalize(0, 1, clip=True)(grids[grid])
+        colour_array = colors.Normalize(0, 1, clip=True)(grids[grid].T)
         colour_array = cmap(colour_array)
-        colour_array[..., -1] = grids[grid]  # Set alpha dependent on intensity
+        colour_array[..., -1] = grids[grid].T  # Set alpha dependent on intensity
 
         if alphas is None:
             alpha = 0.5
         else:
             alpha = alphas[grid]
-
+        
         ax.imshow(colour_array, alpha=alpha)
 
     ax.grid(which='major', axis='both', linestyle='-', color='#333333', linewidth=1)
@@ -61,18 +63,20 @@ def plot_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None
 
     return ax
 
-def plot_grid_values(grid:np.ndarray, cmap:str='viridis', *args, **kwargs) -> plt.axes:
+def plot_grid_values(grid:np.ndarray, cmap:str='viridis', ax:plt.axes=None, *args, **kwargs) -> plt.axes:
     """Plots continuous values on a grid.
 
     Args:
         grid (np.ndarray): 2D array of values to plot
         cmap (str, optional): Colormap. Defaults to 'viridis'.
+        ax (plt.axes): Axes to use for plotting.
 
     Returns:
         plt.axes: Axes
     """
 
-    f, ax = plt.subplots(*args, **kwargs)
+    if ax is None:
+        _, ax = plt.subplots(*args, **kwargs)
 
     # Plot each grid
     ax.imshow(grid, cmap=cmap)
@@ -144,7 +148,7 @@ def draw_hexagons(X, outer_radius=1, edgecolor='#787878', ax=None, alpha=None,
                 y_coord.append(z * (inner_radius * 2) + ((inner_radius * 2) / 2))
             x_coord.append(x * outer_radius * 1.5)
             if facecolor is None:
-                cell_colour = X[z, x]
+                cell_colour = X[x, z]
             else:
                 cell_colour = facecolor
             hex = RegularPolygon((x_coord[-1], y_coord[-1]), numVertices=6, radius=outer_radius, 
@@ -163,13 +167,14 @@ def draw_hexagons(X, outer_radius=1, edgecolor='#787878', ax=None, alpha=None,
     if return_coords:
         return coords
 
-def plot_hex_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None, *args, **kwargs):
+def plot_hex_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=None, ax:plt.axes=None, *args, **kwargs):
     """
     Plots multiple grids
 
     Args:
         grids (np.ndarray): 3D array of grids. The first dimension represents the grid number, the
         second and third dimensions are the X and Y dimensions of each grid
+        ax (plt.axes): Axes to use for plotting.
         colours (list, optional): Colour to use for each grid. Defaults to None.
 
     """
@@ -177,7 +182,8 @@ def plot_hex_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=
     if not grids.ndim == 3:
         raise AttributeError("Grids must be supplied as a 3D numpy array, (n_grids, Xdim, Ydim)")
 
-    f, ax = plt.subplots(*args, **kwargs)
+    if ax is None:
+        f, ax = plt.subplots(*args, **kwargs)
 
     # Plot each grid
     for grid in range(grids.shape[0]):
@@ -190,7 +196,7 @@ def plot_hex_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=
         cmap = colors.LinearSegmentedColormap.from_list('singleColour', [colour, colour], N=2)  # Single colour colormap
         colour_array = colors.Normalize(0, 1, clip=True)(grids[grid])
         colour_array = cmap(colour_array)
-        
+
         if alphas is None:
             alpha = 0.5
         else:

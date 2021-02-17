@@ -145,9 +145,10 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
         Tuple[np.ndarray, np.ndarray]: Returns the value function and Q values for each action in each state
     """
 
+    assert discount < 1 and discount > 0, 'Discount must be between 0 and 1'
+
     # Get number of states and actions
     n_states = sas.shape[0]
-    n_actions = sas.shape[1]
 
     # Initialise state values at zero
     values_ = np.zeros(n_states)
@@ -165,7 +166,7 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
 
         if delta_ < tol:
             break
-    
+
     return values_, q_values_
 
 
@@ -189,6 +190,7 @@ class ValueIteration(Algorithm):
         self.v_history = []
         self._state_value_func = None
         self.online = False
+        self.name = 'value_iteration'
         
         super().__init__()
 

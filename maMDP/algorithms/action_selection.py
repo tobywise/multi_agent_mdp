@@ -131,6 +131,12 @@ class MaxActionSelector(ActionSelector):
     """
     Selects the action with the highest Q value.
     """
+
+    def __init__(self) -> None:
+
+        self.name = 'max'
+
+        super().__init__()
     
     def _get_pi_p(self, q_values:np.ndarray) -> np.ndarray:
         """
@@ -187,6 +193,8 @@ class SoftmaxActionSelector(ActionSelector):
             temperature (float, optional): Softmax temperature. Defaults to 1.
             seed (int, optional): RNG seed. Defaults to None.
         """
+        self.name = 'softmax'
+
         if temperature <= 0:
             raise ValueError('Temperature parameter must be greater than zero')
         self.temperature = temperature
