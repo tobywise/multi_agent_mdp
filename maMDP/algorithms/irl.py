@@ -1,5 +1,5 @@
-from maMDP.algorithms.base import Algorithm
-from maMDP.algorithms.action_selection import MaxActionSelector
+from ..algorithms.base import Algorithm
+from ..algorithms.action_selection import MaxActionSelector
 from .dynamic_programming import ValueIteration, solve_value_iteration
 from ..mdp import MDP
 import numpy as np

@@ -1,4 +1,3 @@
-from maMDP.algorithms.base import Algorithm
 from .environments import Environment
 from .mdp import HexGridMDP
 from .agents import Agent

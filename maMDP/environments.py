@@ -1,7 +1,4 @@
-
-from maMDP.plotting import plot_trajectory
 import numpy as np
-import json
 from .mdp import MDP
 from typing import List, Union, Tuple, Dict
 import matplotlib.pyplot as plt

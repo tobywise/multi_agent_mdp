@@ -1,7 +1,7 @@
 from abc import abstractmethod, abstractproperty, ABCMeta
-from maMDP.environments import Environment
+from ..environments import Environment
 import numpy as np
-from maMDP.mdp import MDP
+from ..mdp import MDP
 import warnings
 
 class Algorithm(metaclass=ABCMeta):
