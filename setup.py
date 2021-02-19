@@ -22,6 +22,7 @@ setup(
         'Programming Language :: Python :: 3 :: Only',
     ],
     python_requires='>=3.6, <4',
+    packages=find_packages(),
     install_requires=['numpy', 'numba', 'matplotlib', 'scipy', 'fastprogress'], 
     extras_require={  
         'test': ['pytest'],
