@@ -62,10 +62,12 @@ def test_squaregrid_deterministic(squareMDP_fixture):
 
 def test_hexgrid_sas(small_hexMDP_fixture):
     correct_sas = np.zeros((4, 6, 4))
-    correct_sas[(0, 0, 1, 1, 2, 2, 3, 3), 
-                (0, 2, 2, 3, 0, 5, 3, 5),
-                (1, 2, 3, 0, 3, 0, 2, 1)
+    correct_sas[(0, 0, 0,  1, 1,  2, 2,  3, 3, 3), 
+                (0, 1, 2,  2, 3,  0, 5,  3, 4, 5),
+                (1, 3, 2,  3, 0,  3, 0,  2, 0, 1)
                 ] = 1
+    print(np.where(small_hexMDP_fixture.sas))
+    print(np.where(correct_sas))
     assert np.all(small_hexMDP_fixture.sas == correct_sas)
 
 def test_squaregrid_sas(small_squareMDP_fixture):
