@@ -13,6 +13,23 @@ def check_q_values(qs):
     if np.all(np.isnan(qs)):
         raise ValueError("All Q values are NaN")
 
+def random_max(x:np.ndarray, rng:np.random.RandomState=None):
+    """
+    Returns a randomly selected index from a 1D array where that index's value equals the array maximum
+
+    Args:
+        x (np.ndarray): 1D array
+        rng (np.random.RandomState): RNG instance
+
+    Returns:
+        [type]: [description]
+    """
+
+    if rng is None:
+        rng = np.random
+
+    return rng.choice(np.where(x == x.max())[0])
+
 class ActionSelector(metaclass=ABCMeta):
     """
     Base class for action selectors. These take a Q values for each state-action pair
@@ -129,12 +146,22 @@ class ActionSelector(metaclass=ABCMeta):
 
 class MaxActionSelector(ActionSelector):
     """
-    Selects the action with the highest Q value.
+    Selects the action with the highest Q value. If no single action has the maximum Q value, one of those that does
+    is chosen at random.
+
     """
 
-    def __init__(self) -> None:
-
+    def __init__(self, seed:int=None) -> None:
+        """
+        Args:
+            seed (int, optional): RNG seed. Defaults to None.
+        """
         self.name = 'max'
+
+        if seed is not None:
+            self.rng = np.random.default_rng(seed=seed)
+        else:
+            self.rng = np.random
 
         super().__init__()
     
@@ -154,8 +181,9 @@ class MaxActionSelector(ActionSelector):
         self._pi_p = np.zeros((n_states, n_actions))  # Probability of choosing action A in state S given policy
 
         for s in range(n_states):
-            action = np.argmax(q_values[s, :])
-            self._pi_p[s, action] = 1  # Deterministic, only one action chosen
+            # action = np.argmax(q_values[s, :])
+            max_actions = np.where(q_values[s, :] == q_values[s, :].max())[0]
+            self._pi_p[s, max_actions] = 1 / len(max_actions)  # Deterministic, only one action chosen
 
         return self._pi_p
 
@@ -175,7 +203,8 @@ class MaxActionSelector(ActionSelector):
         self._pi = np.zeros(n_states)
 
         for s in range(n_states):
-            action = np.argmax(q_values[s, :])
+            # action = np.argmax(q_values[s, :])
+            action = random_max(q_values[s, :], self.rng)
             self._pi[s] = action
 
         self._pi = self._pi.astype(int)

@@ -8,7 +8,7 @@ def q_values_fixture():
     q_vals = np.zeros((5, 4))  # 5 states, 4 actions
     q_vals[0, :] = np.array([4.5, 3.5, 2.5, 1.5])
     q_vals[1, :] = np.array([0, 0, 0, 0])
-    q_vals[2, :] = np.array([1, 1, 1, 1])
+    q_vals[2, :] = np.array([1, 1, 0, 0])
     q_vals[3, :] = np.array([200, 50, 2, 1])
     q_vals[4, :] = np.array([-20, 0, 20, 1])
     return q_vals
@@ -33,22 +33,39 @@ def test_max_action_selector_action_p(q_values_fixture):
 
     expected_action_p = np.zeros((5, 4))  # 5 states, 4 actions
     expected_action_p[0, 0] = 1
-    expected_action_p[1, 0] = 1
-    expected_action_p[2, 0] = 1
+    expected_action_p[1, :] = .25
+    expected_action_p[2, :2] = .5
     expected_action_p[3, 0] = 1
     expected_action_p[4, 2] = 1
 
     assert np.all(action_p == expected_action_p)
 
-def test_max_action_selector_action(q_values_fixture):
+def test_max_action_selector_action_single_best(q_values_fixture):
 
     selector = MaxActionSelector()
     action = selector.get_pi(q_values_fixture)
 
-    expected_action = np.array([0, 0, 0, 0, 2])
+    assert action[0] == 0
+    assert action[3] == 0
+    assert action[4] == 2
 
-    assert np.all(action == expected_action)
+def test_max_action_selector_action_multiple_best(q_values_fixture):
 
+    selector = MaxActionSelector()
+
+    actions = {'a': [], 'b': []}
+
+    for i in range(100):
+        action = selector.get_pi(q_values_fixture)
+        actions['a'].append(action[1])
+        actions['b'].append(action[2])
+
+    # Check it's not producing the same response every time
+    assert np.sum(np.diff(actions['a']) != 0)
+    assert np.sum(np.diff(actions['b']) != 0)
+
+    # Check responses are valid
+    assert np.all(np.isin(np.array(actions['b']), [0, 1]))
 
 def test_softmax_action_selector_action_p(q_values_fixture):
 
@@ -68,7 +85,7 @@ def test_softmax_action_selector_action_p(q_values_fixture):
 
     assert np.all(np.diff(action_p[0, :]) < 0)
     assert np.all(action_p[1, :] == action_p[1, 0])
-    assert np.all(action_p[2, :] == action_p[1, 0])
+    assert action_p[2, 0] == action_p[2, 1]
     assert np.all(action_p >= 0)
     assert np.all(action_p <= 1)
 

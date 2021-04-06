@@ -1,4 +1,4 @@
-from typing import Type, Union, List, Dict
+from typing import Tuple, Type, Union, List, Dict
 import numpy as np
 import warnings
 from .grid_utils import get_action_from_states_hex, get_action_from_states_square, grid_coords, hex_adjacency, square_adjacency
@@ -356,8 +356,43 @@ class GridMDP(MDP, metaclass=ABCMeta):
     def state_to_idx(self, state:int):
         return np.unravel_index(state, self.shape)
 
-    def idx_to_state(self, idx):
+    def idx_to_state(self, idx:tuple):
         return np.ravel_multi_index(idx, self.shape)
+
+
+    def add_wall_xy(self, x:Tuple[int], y:Tuple[int]):
+        """
+        Adds a wall to an existig environment based on X and Y coordinates. 
+
+        Coordinates can either be a single X/Y entry or the start and end points of a range, for example
+        x=(1,), y=(2,5) will place a wall at X index 1, Y indices 2-5.
+
+        Args:
+            x (Tuple): X coordinate(s)
+            y (Tuple): Y coordinate(s)
+        """
+
+        new_walls = self.walls.copy()
+
+        for i in [x, y]:
+            if not isinstance(i, tuple) and not isinstance(i, list):
+                raise TypeError("X and Y should be provided as tuples or lists")
+
+        if len(x) == 2:
+            x = range(*x)
+        if len(y) == 2:
+            y = range(*y)
+
+        for x_id in x:
+            for y_id in y:
+                new_walls[self.idx_to_state((x_id, y_id))] = 1
+
+        self.walls = new_walls
+
+    def reset_walls(self):
+
+        self.walls *= 0
+
 
     def plot_trajectory(self, trajectory:List[int], ax:plt.axes, colour:str='black', 
                         head_width:int=0.3, head_length:int=0.3, *args, **kwargs) -> plt.axes:
