@@ -97,23 +97,25 @@ class Environment():
         if not agent_name in self.agent_names:
             raise ValueError("Agent named {0} is not present in the environment, valid names are {1}".format(agent_name, self.agent_names))
 
-    def fit(self, agent_name:str):
+    def fit(self, agent_name:str, n_steps:int=None):
         """
         Calculates action values for a given agent.
 
         Args:
             agent_name (str): Name of the agent to fit.
+            n_steps (int, optional): Number of steps to plan ahead, if used by the algorithm. Defaults to None.
         """
 
         self._check_agent_name(agent_name)
-        self.agents[agent_name].fit()
+        self.agents[agent_name].fit(n_steps=n_steps)
 
-    def step(self, agent_name:str) -> int:
+    def step(self, agent_name:str, n_steps:int=None) -> int:
         """
         Moves a given agent one step in the environment.
 
         Args:
             agent_name (str): Name of the agent to step.
+            n_steps (int, optional): Number of steps to plan ahead, if used by the algorithm. Defaults to None.
 
         Returns:
             int: New position
@@ -128,6 +130,29 @@ class Environment():
         self.n_steps += 1
 
         return self.agents[agent_name].position
+
+    def step_proba(self, agent_name:str, position:int=None) -> np.ndarray:
+        """
+        Generates a probabilistic representation of the results of stepping an agent. 
+
+        Args:
+            agent_name (str): Agent to step.
+            position (int): Starting position. If None, uses the agent's current position. Defaults to None.
+
+        Returns:
+            np.ndarray: Array representing probability of being in each state in the MDP after one step from the provided position.
+        """
+
+        self._check_agent_name(agent_name)
+        next_states_p = self.agents[agent_name].step_proba(position=position)
+
+        # Consume features if necessary - i.e. set feature to zero
+        # self._consume_features(agent_name)
+
+        self.n_steps += 1
+
+        return next_states_p
+
 
     def _consume_features(self, agent_name:str):
         """
@@ -153,7 +178,8 @@ class Environment():
 
         return caught
 
-    def step_multi(self, agent_name:str, n_steps:int=None, refit:bool=False, progressbar:bool=False) -> List[int]:
+    def step_multi(self, agent_name:str, n_steps:int=None, refit:bool=False, progressbar:bool=False,
+                  adjust_planning_steps:bool=True) -> List[int]:
         """
         Moves an agent multiple steps within the environment.
 
@@ -163,6 +189,10 @@ class Environment():
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
             Defaults to False.
+            adjust_planning_steps (bool or int, optional). If true, the number of steps used for the planning algorithm (if it plans
+            for a set number of steps, like MCTS) is adjusted based on the number of steps the agent is expected to make (as set in the 
+            `agent.n_steps` attribute). If an int is provided, this (minus 1 for each move made) will be used as the number of planning 
+            steps instead. Defaults to True.
             progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
 
         Returns:
@@ -181,27 +211,35 @@ class Environment():
 
         positions = []
 
-        for _ in steps:
+        for i in steps:
             if refit:
-                self.fit(agent_name)
+                if adjust_planning_steps == True:
+                    self.fit(agent_name, n_steps - i)
+                elif isinstance(adjust_planning_steps, int):
+                    self.fit(agent_name, adjust_planning_steps - i)
+                else:
+                    self.fit(agent_name)
             self.step(agent_name)
             positions.append(self.agents[agent_name].position)
-        
+
         return positions
 
     def step_multi_interactive(self, agent_names:List[str]=None, n_steps:int=10, refit:bool=False, progressbar:bool=False,
-                               stop_on_caught:bool=True):
+                               stop_on_caught:bool=True, adjust_planning_steps:bool=True):
         """
         Moves an agent multiple steps within the environment.
 
         Args:
-            agent_names (List[str], optional): Names of agents to step. By default, includes every agent.
-            n_steps (int, optional): Number of steps to move. Defaults to 10.
+            agent_names (List[str], optional): Names of agents to step. By default, includes every agent. Agents move in the
+            order given.
+            n_steps (int, optional): Number of turns taken (each turn may involve more than 1 step).  Defaults to 10.
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
             Defaults to False.
             progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
             stop_on_caught (bool, optional): If true, stops moving agents when one of them gets caught.
+            adjust_planning_steps (bool, optional). If true, the number of steps used for the planning algorithm (if it plans
+            for a set number of steps, like MCTS) is adjusted based on the number of steps simulated. Defaults to True.
         """
 
         if agent_names is None:
@@ -215,11 +253,17 @@ class Environment():
         else:
             steps = range(n_steps)
 
+        agent_steps = dict([(a, self.agents[a].n_moves) for a in agent_names])
+
         for i in steps:
+            
             for agent_name in agent_names:
                 if refit:
-                    self.fit(agent_name)
-                self.step(agent_name)
+                    if adjust_planning_steps:
+                        self.step_multi(agent_name, agent_steps[agent_name], refit=refit, adjust_planning_steps=int((agent_steps[agent_name] * n_steps) - i))
+                    else:
+                        self.step_multi(agent_name, agent_steps[agent_name], refit=refit)
+                # self.step_multi(agent_name, agent_steps[agent_name], refit=refit)
                 caught = self._check_agents_caught(agent_name)
                 if caught and stop_on_caught:
                     warnings.warn("Agent was caught, stopping")
@@ -317,7 +361,8 @@ class Environment():
 
     # Plotting methods
     def plot(self, colours:list=None, alphas:list=None, agent_markers:Dict[str, str]={}, 
-            agent_colours:Dict[str, str]={}, mdp_plotting_kwargs:Dict={}, agent_plotting_kwargs:Dict={}) -> plt.axes:
+            agent_colours:Dict[str, str]={}, mdp_plotting_kwargs:Dict={}, agent_plotting_kwargs:Dict={}, 
+            ax:plt.axes=None) -> plt.axes:
         """
         Plots the environment, showing the underlying MDP (if it implements plotting functions) and the
         agents interacting with it.
@@ -329,14 +374,14 @@ class Environment():
             agent names, values represent Matplotlib markers. Defaults to {}.
             agent_colours (Dict[str, str], optional): Colours used to represent the agents, keys represent
             agent names, colours represent colours. Defaults to {}.
-            mdp_plotting_kwargs (Dict): Keyword arguments to be passed to the underlying MDP plot function.
-            agent_plotting_kwargs (Dict): Keyword arguments to be passed to the underlying agent plot function.
+            mdp_plotting_kwargs (Dict, optional): Keyword arguments to be passed to the underlying MDP plot function.
+            agent_plotting_kwargs (Dict, optional): Keyword arguments to be passed to the underlying agent plot function.
+            ax (plt.axes, optional): Plotting axes.
 
         Returns:
         plt.axes: Axes for plot
         """
-
-        ax = self.mdp.plot(colours=colours, alphas=alphas, **mdp_plotting_kwargs)
+        ax = self.mdp.plot(colours=colours, alphas=alphas, ax=ax, **mdp_plotting_kwargs)
         for agent_name, agent in self.agents.items():
             if agent_name in agent_colours:
                 colour = agent_colours[agent_name]

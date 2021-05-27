@@ -9,6 +9,7 @@ from typing import Dict
 from .plotting import plot_agent
 import matplotlib.pyplot as plt
 from typing import List
+import warnings
 
 
 class Agent():
@@ -142,12 +143,10 @@ class AttachedAgent():
         self.pi_p = self.action_selector.get_pi_p(self.algorithm.q_values)
         self.pi = self.action_selector.get_pi(self.algorithm.q_values)
 
-    def fit(self, **kwargs):
-        
-        # TODO allow this to handle online and offline
+    def fit(self, n_steps:bool=None, **kwargs):
 
         # Solve MDP
-        self.algorithm.fit(self.__parent_mdp, self.reward_function, self.position, **kwargs)
+        self.algorithm.fit(self.__parent_mdp, self.reward_function, self.position, n_steps, **kwargs)
 
         # Get policy
         self.get_policy()
@@ -168,6 +167,50 @@ class AttachedAgent():
         self.position = int(next_state)
         self.position_history.append(self.position)
         self.__parent_mdp.update_agent_feature(self.agent_idx, self.position)
+
+    def step_proba(self, position:np.ndarray=None) -> np.ndarray:
+        """
+        Generates a probabilistic representation of the results of stepping the agent. 
+
+        Assumes the MDP is solved, so that action probabilites are available for every state-action pair.
+
+        Args:
+            position (List[float], optional): Starting position as Numpy array of position probabilities. 
+                                              If None, uses the current position of the agent. Defaults to None.
+
+        Returns:
+            np.ndarray: Array representing probability of being in each state in the MDP after one step from the provided position.
+        """
+
+        if position is None:
+            position = np.zeros(self.__parent_mdp.n_states)
+            position[self.position] = 1
+
+        assert len(position) == self.__parent_mdp.n_states, "Number of positions provided does not equal the number of states in the MDP"
+
+        position = position / position.sum()  # Make sure probabilities sum to 1
+
+        if not self.algorithm.fit_complete:
+            raise AttributeError("Agent has not been fit yet")
+
+        self.get_policy()
+
+        if not np.any(self.pi_p > 0):
+            warnings.warn('No actions have a choice probability greater than 0')
+        
+        # Probability of transitioning to each state
+        next_states_p = np.zeros(self.__parent_mdp.n_states)
+
+        # Get current states
+        current_states = np.argwhere(position > 0).flatten()
+
+        for s in current_states:
+            for action in range(self.pi_p.shape[1]):
+                next_state = self._parent_mdp.get_next_state(s, action)
+                next_states_p[next_state] = self.pi_p[s, action] * position[s]
+
+        return next_states_p
+
 
     def reset(self):
         self.position = self.__starting_position

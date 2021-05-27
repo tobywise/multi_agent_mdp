@@ -124,7 +124,6 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
 
     return values, delta, q_values
 
-
 @njit
 def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_iter:int, 
                           discount:float, sas:np.ndarray, tol:float, soft=False) -> Tuple[np.ndarray, np.ndarray]:
@@ -149,6 +148,7 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
 
     # Get number of states and actions
     n_states = sas.shape[0]
+    n_actions = sas.shape[1]
 
     # Initialise state values at zero
     values_ = np.zeros(n_states)
@@ -167,11 +167,19 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
         if delta_ < tol:
             break
 
+    # Set invalid transitions to negative infinity
+    valid_transitions = sas.sum(axis=-1) == 0
+    
+    for s in range(n_states):
+        for a in range(n_actions):
+            if valid_transitions[s, a]:
+                q_values_[s, a] = -np.inf
+
     return values_, q_values_
 
 
 
-
+# TODO add soft option
 class ValueIteration(Algorithm):
 
     def __init__(self, discount:float=0.9, tol:float=1e-8, max_iter:int=500):
@@ -204,7 +212,7 @@ class ValueIteration(Algorithm):
         return values, q_values
 
 
-    def _fit(self, mdp:MDP, reward_function:np.ndarray, position) -> Union[np.ndarray, np.ndarray]:
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps) -> Union[np.ndarray, np.ndarray]:
         """
         Uses value iteration to solve the MDP
 

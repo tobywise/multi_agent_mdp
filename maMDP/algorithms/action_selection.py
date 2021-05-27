@@ -3,7 +3,12 @@ from typing import Union, Tuple
 import numpy as np
 
 def softmax(qs, temperature=1):
-    return (np.exp(qs / temperature)) / np.sum(np.exp(qs / temperature), axis=0)
+
+    # No valid transitions
+    if np.all(np.isneginf(qs)):
+        return np.ones_like(qs) / len(qs)
+    else:
+        return (np.exp(qs / temperature)) / np.sum(np.exp(qs / temperature), axis=0)
 
 def check_q_values(qs):
     if not isinstance(qs, np.ndarray):
@@ -181,7 +186,6 @@ class MaxActionSelector(ActionSelector):
         self._pi_p = np.zeros((n_states, n_actions))  # Probability of choosing action A in state S given policy
 
         for s in range(n_states):
-            # action = np.argmax(q_values[s, :])
             max_actions = np.where(q_values[s, :] == q_values[s, :].max())[0]
             self._pi_p[s, max_actions] = 1 / len(max_actions)  # Deterministic, only one action chosen
 

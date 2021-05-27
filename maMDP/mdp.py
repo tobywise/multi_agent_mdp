@@ -272,6 +272,19 @@ class MDP():
         else:
             raise AttributeError("States are not adjacent")
 
+    def state_valid_actions(self, state:int) -> np.ndarray:
+        """
+        Returns valid actions from a given state (i.e. actions that lead to another state).
+
+        Args:
+            state (int): Starting state.
+
+        Returns:
+            np.ndarray: Returns an array of action indices.
+        """
+
+        return np.where(self.sas[state, ...])[0]
+
     def observation(self):
         pass
 
@@ -279,7 +292,7 @@ class MDP():
         self.features = self.__original_feature_array
 
     # Plotting functions
-    def plot(self, colours:list=None, alphas:list=None, *args, **kwargs):
+    def plot(self, colours:list=None, alphas:list=None, ax=None, *args, **kwargs):
         """ Must be overriden when subclassing to enable plotting methods """
         raise NotImplementedError("This MDP does not implement plotting functions")
 
@@ -503,7 +516,7 @@ class SquareGridMDP(GridMDP):
 
         return ax
 
-    def plot_state_values(self, values, cmap='viridis', *args, **kwargs) -> plt.axes:
+    def plot_state_values(self, values, cmap='viridis', ax=None, *args, **kwargs) -> plt.axes:
         """
         Plots continuous values for all states within the MDP.
 
@@ -519,7 +532,7 @@ class SquareGridMDP(GridMDP):
             raise AttributeError("Values should be provided as a flat, 1D array with one value per state")
 
         values = self.flat_to_grid(values)
-        ax = plot_grid_values(values, cmap=cmap, *args, **kwargs)
+        ax = plot_grid_values(values, cmap=cmap, ax=ax, *args, **kwargs)
 
         return ax
 
@@ -569,7 +582,7 @@ class HexGridMDP(GridMDP):
 
         return sas
 
-    def plot(self, colours:list=None, alphas:list=None, wall_colour:str='#595959', *args, **kwargs) -> plt.axes:
+    def plot(self, colours:list=None, alphas:list=None, wall_colour:str='#595959', ax=None, *args, **kwargs) -> plt.axes:
         """
         Plots the MDP, showing each feature.
 
@@ -582,7 +595,7 @@ class HexGridMDP(GridMDP):
             plt.axes: Axes
         """
 
-        ax, self.coords = plot_hex_grids(self.features_as_grid()[:-self.n_agents, :], colours, alphas, *args, **kwargs)
+        ax, self.coords = plot_hex_grids(self.features_as_grid()[:-self.n_agents, :], colours, alphas, ax=ax, *args, **kwargs)
 
         # Plot walls
         ax, _ = plot_hex_grids(self.flat_to_grid(self.walls)[None, :], [wall_colour], [1], ax=ax)

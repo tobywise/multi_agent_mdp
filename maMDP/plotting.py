@@ -221,7 +221,7 @@ def plot_hex_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=
 
     return ax, coords
 
-def plot_hex_grid_values(grid:np.ndarray, cmap:str='viridis', *args, **kwargs) -> plt.axes:
+def plot_hex_grid_values(grid:np.ndarray, cmap:str='viridis', ax=None, *args, **kwargs) -> plt.axes:
     """Plots continuous values on a hex grid.
 
     Args:
@@ -232,7 +232,8 @@ def plot_hex_grid_values(grid:np.ndarray, cmap:str='viridis', *args, **kwargs) -
         plt.axes: Axes
     """
 
-    f, ax = plt.subplots(*args, **kwargs)
+    if ax is None:
+        f, ax = plt.subplots(*args, **kwargs)
 
     # Get colours 
     cmap = plt.get_cmap(cmap)

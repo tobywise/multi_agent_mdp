@@ -52,7 +52,10 @@ def get_opponent_next_state(opponent_policy_method:str, states:list, current_sta
 
         # Get action
         if action_selection == 'max':
-            next_state = np.argmax(sas[current_state, np.argmax(q_values[current_state, :]), :])
+            max_actions = np.where(q_values[current_state, :] == q_values[current_state, :].max())[0]
+            action = np.random.choice(max_actions)
+            next_state = np.argmax(sas[current_state, action, :])
+            # next_state = np.argmax(sas[current_state, np.argmax(q_values[current_state, :]), :])
         elif action_selection == 'softmax':
             action_p = softmax(q_values[current_state, :], temperature=softmax_temperature)
             action = rand_choice_nb(np.arange(len(action_p)), p=action_p)
@@ -188,7 +191,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
         current_node (np.ndarray): Starting node for each agent. 
         cached_q_values (List[Dict[Tuple, np.ndarray]]): Cached Q values, used to save recomputing for other agents
         if not necessary.
-        n_moves (Tuple[int]): Number of moves per turn for each agent. K
+        n_moves (Tuple[int]): Number of moves per turn for each agent. 
         consumes_agents (np.ndarray): Which agents consume one another. Boolean array of shape (n agents X n agents), where true
         indicates agent X consumes agent Y.
         consumes_features (np.ndarray): Which agents consume which features. Boolean array of shape (n agents X n features), where true
@@ -250,7 +253,9 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
     cache_used = 0
 
     # Step through until agent has made as many steps as needed
-    while total_steps < n_steps:
+    # +1 to ensure that other agents make moves after the primary agent - this isn't ideal as it means the 
+    # primary agent takes an extra step
+    while total_steps < n_steps + 1:
 
         # Set corresponding agent feature
         features[agent_feature_idx[current_actor], :] = 0
@@ -310,6 +315,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
 
                 if return_other_agent_states:
                     other_agent_visited_states[current_actor - 1].append(current_node[current_actor])
+
 
         # Consume features in this state
         if agents_active[current_actor]:
@@ -525,9 +531,9 @@ class MCTS(Algorithm):
     Implements Monte Carlo Tree Search, with optional interactivity (i.e. accounting for other agents' actions).
     """
 
-    def __init__(self, n_iter:int=1000, n_steps:int=30, C:float=1, caught_cost:float=-50, 
+    def __init__(self, n_iter:int=1000, n_steps:int=10, C:float=1, caught_cost:float=-50, 
                  interactive:bool=False, opponent_policy_method:str='solve', 
-                 opponent_action_selection:str='max', softmax_temperature:float=1, caching:bool=False, reset_cache:bool=False,
+                 opponent_action_selection:str='max', softmax_temperature:float=1, caching:bool=False, reset_cache:bool=True,
                  return_states:bool=False,return_other_agent_states:bool=False,VI_kwargs:Dict={}):
         """
         Args:
@@ -601,7 +607,10 @@ class MCTS(Algorithm):
 
         return agent_info, opponent_info
 
-    def _fit(self, mdp, reward_function, position):
+    def _fit(self, mdp, reward_function, position, n_steps):
+
+        if n_steps is None:
+            n_steps = self.n_steps
 
         # This requires an environment as it needs info about other agents
         if self._environment is None and self.interactive:
@@ -620,7 +629,7 @@ class MCTS(Algorithm):
         self.V, self.N, \
         self.cache, self.visited_states, \
         self.other_agent_visited_states = run_mcts(self.interactive, self.n_iter, mdp.features.copy(), mdp.sas,
-                                                    agent_info, opponent_info, self.n_steps, self.C, self.caught_cost,
+                                                    agent_info, opponent_info, n_steps, self.C, self.caught_cost,
                                                     self.opponent_policy_method, self.opponent_action_selection, 
                                                     self.softmax_temperature, self.caching,
                                                     self.cache, self.return_states, self.return_other_agent_states, self.VI_kwargs)

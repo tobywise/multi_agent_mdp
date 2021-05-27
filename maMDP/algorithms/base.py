@@ -21,13 +21,14 @@ class Algorithm(metaclass=ABCMeta):
         self._agent = agent
         self._environment = environment
 
-    def fit(self, mdp:MDP, reward_function:np.ndarray, position:int,  *args, **kwargs):
+    def fit(self, mdp:MDP, reward_function:np.ndarray, position:int, n_steps:int,  *args, **kwargs):
         """
         Runs the algorithm to determine the value of different actions.
 
         Args:
             mdp (MDP): The MDP containing states and actions.
             reward_function (np.ndarray): The reward function used to determine state values.
+            n_steps (int, optional): Number of steps to plan ahead, if used by the algorithm. Can be int or None.
             position (int): Current position of the agent (i.e. the state it is currently in). Used for online algorithms.
         """
 
@@ -42,7 +43,7 @@ class Algorithm(metaclass=ABCMeta):
             raise AttributeError("Reward function should have as many entries as the MDP has features")
 
         # Use the fit method
-        values, q_values = self._fit(mdp, reward_function, position, *args, **kwargs)
+        values, q_values = self._fit(mdp, reward_function, position, n_steps, *args, **kwargs)
 
         # Check outputs before accepting them
         assert isinstance(values, np.ndarray), 'Values should be in the form of a numpy array'
@@ -63,7 +64,7 @@ class Algorithm(metaclass=ABCMeta):
         self.q_values = q_values
 
     @abstractmethod
-    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, *args, **kwargs):
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps, *args, **kwargs):
         """ Fit the algorithm 
         Must return numpy arrays representing:
         1) State values (value function): 1D array (n_states, )

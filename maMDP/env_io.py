@@ -32,7 +32,7 @@ def hex_env_to_dict(env:Environment, feature_names:List=None, format:str='index'
     env_dict['features'] = {}
 
     for f in range(env.mdp.n_features - len(env.agents)):
-        print(f, feature_names[f])
+        # print(f, feature_names[f])
         if format == 'index':
             env_dict['features'][feature_names[f]] = np.where(env.mdp.features[f, :])[0].astype(int).tolist()
         elif format == 'coords':
@@ -103,7 +103,7 @@ def hex_environment_from_dict(env_dict, feature_names=[]):
         n_features = len(env_dict['features'])
         features = np.zeros((n_features, np.product(env_dict['size'])))
         for n, f in enumerate(feature_names):
-            print("CREATING ENV", n, f)
+            # print("CREATING ENV", n, f)
             states = env_dict['features'][f]
             features[n, states] = 1
 
