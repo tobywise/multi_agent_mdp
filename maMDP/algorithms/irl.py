@@ -534,7 +534,7 @@ def get_trajectory_eyeline_features(mdp, trajectories, normalise=True):
             action = state_pair_to_action(mdp, state, trajectory[n+1])
             feature_counts += get_eyeline_features(mdp, state, action)
 
-    if normalise:
+    if normalise and not np.all(feature_counts == 0):
         feature_counts /= feature_counts.sum()
 
     return feature_counts
@@ -555,8 +555,10 @@ def get_trajectory_eyeline_features_diff(mdp, trajectories, normalise=True):
                     unchosen_feature_counts += get_eyeline_features(mdp, state, action)
 
     if normalise:
-        chosen_feature_counts /= chosen_feature_counts.sum()
-        unchosen_feature_counts /= unchosen_feature_counts.sum()
+        if not np.all(chosen_feature_counts == 0):
+            chosen_feature_counts /= chosen_feature_counts.sum()
+        if not np.all(unchosen_feature_counts == 0):
+            unchosen_feature_counts /= unchosen_feature_counts.sum()
 
     feature_counts = chosen_feature_counts - unchosen_feature_counts
 
@@ -574,7 +576,6 @@ class SimpleActionIRL():
 
         for n, m in enumerate(mdp):
             observed_feature_counts = get_trajectory_eyeline_features(m, [trajectories[n]])
-
             self.theta += observed_feature_counts
 
         return self.theta
