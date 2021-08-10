@@ -46,7 +46,6 @@ class Agent():
         self.action_selector = action_selector(**action_kwargs)
 
         # Retain these for use later
-        self.algorithm_kwargs = algorithm_kwargs
         self.action_kwargs = action_kwargs
 
         self.name = name
@@ -57,7 +56,7 @@ class Agent():
         return AttachedAgent(name=self.name, n_moves=self.n_moves, reward_function=reward_function, consumes=consumes,
                              algorithm=self.algorithm, action_selector=self.action_selector, 
                              parent_mdp=mdp, parent_environment=env, position=position, index=index,
-                             algorithm_kwargs=self.algorithm_kwargs, action_kwargs=self.action_kwargs)
+                             action_kwargs=self.action_kwargs)
 
 
 class AttachedAgent():
@@ -66,7 +65,7 @@ class AttachedAgent():
     def __init__(self, name: str, n_moves:int, reward_function:np.ndarray, consumes:List[int],
                 algorithm: Algorithm, action_selector: ActionSelector, 
                 parent_mdp:MDP, parent_environment:Environment, position:int, index:int,
-                algorithm_kwargs:Dict, action_kwargs:Dict):
+                action_kwargs:Dict):
        
         self.name = name
         self.n_moves = n_moves
@@ -74,9 +73,7 @@ class AttachedAgent():
         self.consumes = consumes
         self.consumed = np.zeros(len(reward_function))
 
-        self.algorithm = algorithm
         self.action_selector = action_selector
-        self.algorithm_kwargs = algorithm_kwargs
         self.action_kwargs = action_kwargs
 
         self.agent_idx = index
@@ -85,10 +82,8 @@ class AttachedAgent():
         self._parent_mdp = parent_mdp
         self._parent_environment = parent_environment
 
-        self.algorithm._attach(self, parent_environment)
-
-        # Provide the algorithm with information about the environment
-        self.algorithm.environment = parent_environment
+        self.algorithm = algorithm
+        # self.__algorithm._attach(self, parent_environment)
 
         # Add feature to the MDP
         self.__parent_mdp.add_agent_feature(position)
@@ -102,6 +97,18 @@ class AttachedAgent():
         # Policy
         self.pi = None
         self.pi_p = None
+
+    @property
+    def algorithm(self):
+        return self.__algorithm
+
+    @algorithm.setter
+    def algorithm(self, algorithm):
+
+        self.__algorithm = algorithm
+        self.__algorithm._attach(self, self._parent_environment)
+
+        pass
 
     @property
     def _attached(self):
@@ -140,20 +147,20 @@ class AttachedAgent():
 
     def get_policy(self):
 
-        self.pi_p = self.action_selector.get_pi_p(self.algorithm.q_values)
-        self.pi = self.action_selector.get_pi(self.algorithm.q_values)
+        self.pi_p = self.action_selector.get_pi_p(self.__algorithm.q_values)
+        self.pi = self.action_selector.get_pi(self.__algorithm.q_values)
 
     def fit(self, n_steps:bool=None, **kwargs):
 
         # Solve MDP
-        self.algorithm.fit(self.__parent_mdp, self.reward_function, self.position, n_steps, **kwargs)
+        self.__algorithm.fit(self.__parent_mdp, self.reward_function, self.position, n_steps, **kwargs)
 
         # Get policy
         self.get_policy()
         
     def step(self):
 
-        if not self.algorithm.fit_complete:
+        if not self.__algorithm.fit_complete:
             raise AttributeError("Agent has not been fit yet")
 
         self.get_policy()
@@ -190,7 +197,7 @@ class AttachedAgent():
 
         position = position / position.sum()  # Make sure probabilities sum to 1
 
-        if not self.algorithm.fit_complete:
+        if not self.__algorithm.fit_complete:
             raise AttributeError("Agent has not been fit yet")
 
         self.get_policy()
@@ -216,7 +223,7 @@ class AttachedAgent():
         self.position = self.__starting_position
         self.pi = None
         self.pi_p = None
-        self.position_history = []
+        self.position_history = [self.__starting_position]
 
     def plot(self, ax:plt.axes, marker:str="X", *args, **kwargs):
         """

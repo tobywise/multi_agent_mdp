@@ -87,3 +87,16 @@ class Algorithm(metaclass=ABCMeta):
         Additional things to reset when subclassing
         """
         pass
+
+
+class Null(Algorithm):
+    """
+    Implements a null planning model which estimates all state values and Q values to be 1.
+    """
+
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps):
+
+        state_vawlues = np.ones(mdp.n_states)
+        q_values = np.ones((mdp.n_states, mdp.n_actions))
+
+        return state_vawlues, q_values
