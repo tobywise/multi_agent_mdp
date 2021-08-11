@@ -5,12 +5,14 @@ from maMDP.algorithms.action_selection import *
 
 @pytest.fixture
 def q_values_fixture():
-    q_vals = np.zeros((5, 4))  # 5 states, 4 actions
+    q_vals = np.zeros((7, 4))  # 5 states, 4 actions
     q_vals[0, :] = np.array([4.5, 3.5, 2.5, 1.5])
     q_vals[1, :] = np.array([0, 0, 0, 0])
     q_vals[2, :] = np.array([1, 1, 0, 0])
     q_vals[3, :] = np.array([200, 50, 2, 1])
     q_vals[4, :] = np.array([-20, 0, 20, 1])
+    q_vals[5, :] = np.array([10003434, 0, 100000, -100])
+    q_vals[6, :] = np.array([-100000, 0, -5000, -500000000000])
     return q_vals
 
 @pytest.fixture()
@@ -31,12 +33,14 @@ def test_max_action_selector_action_p(q_values_fixture):
     selector = MaxActionSelector()
     action_p = selector.get_pi_p(q_values_fixture)
 
-    expected_action_p = np.zeros((5, 4))  # 5 states, 4 actions
+    expected_action_p = np.zeros((7, 4))  # 5 states, 4 actions
     expected_action_p[0, 0] = 1
     expected_action_p[1, :] = .25
     expected_action_p[2, :2] = .5
     expected_action_p[3, 0] = 1
     expected_action_p[4, 2] = 1
+    expected_action_p[5, 0] = 1
+    expected_action_p[6, 1] = 1
 
     assert np.all(action_p == expected_action_p)
 
@@ -82,6 +86,8 @@ def test_softmax_action_selector_action_p(q_values_fixture):
 
     selector = SoftmaxActionSelector(temperature=1, seed=123)
     action_p = selector.get_pi_p(q_values_fixture)
+
+    print(action_p)
 
     assert np.all(np.diff(action_p[0, :]) < 0)
     assert np.all(action_p[1, :] == action_p[1, 0])

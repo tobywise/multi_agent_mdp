@@ -8,7 +8,9 @@ def softmax(qs, temperature=1):
     if np.all(np.isneginf(qs)):
         return np.ones_like(qs) / len(qs)
     else:
-        return (np.exp(qs / temperature)) / np.sum(np.exp(qs / temperature), axis=0)
+        # Subtract max value from Qs to avoid overflow
+        out = (np.exp((qs - qs.max()) / temperature)) / (np.sum(np.exp((qs - qs.max()) / temperature), axis=0))
+        return out
 
 def check_q_values(qs):
     if not isinstance(qs, np.ndarray):
@@ -93,7 +95,7 @@ class ActionSelector(metaclass=ABCMeta):
 
         # Ensure q values are provided in the right format
         check_q_values(q_values)
-
+        
         nan_states = np.isnan(np.nanmean(q_values, axis=1))
 
         q_values = q_values.copy()

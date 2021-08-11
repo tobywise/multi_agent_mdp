@@ -102,6 +102,10 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
     # Loop over every state
     for s in range(n_states):
 
+        if np.any(np.isinf(values)):
+            print(values)
+            raise ValueError
+
         # Current estimate of V(s)
         v = values[s]
 
@@ -114,7 +118,7 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
             values[s] = action_values.max()
         else:
             # Softmax (e.g. Bloem & Bambos, 2014)
-            values[s] = np.log(np.sum(np.exp(action_values)))
+            values[s] = np.log(np.sum(np.exp(action_values) + 1e-200))  # Add a small amount here to avoid doing log(0) and getting -inf
 
         # Update Q value for each action in this state
         q_values[s, :] = action_values
