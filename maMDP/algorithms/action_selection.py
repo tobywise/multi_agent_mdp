@@ -276,7 +276,7 @@ class SoftmaxActionSelector(ActionSelector):
         self._pi = np.zeros(n_states)
 
         for s in range(n_states):
-            self._pi[s] = self.rng.choice(range(n_actions), p=self._pi_p[s, :])
+            self._pi[s] = self.rng.choice(range(n_actions), p=self._pi_p[s, :] / np.sum(self._pi_p[s, :]))
 
         self._pi = self._pi.astype(int)
 
