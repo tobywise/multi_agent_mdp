@@ -265,6 +265,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
         if interactive:
             added_reward, agents_active, caught = check_agent_overlap(consumes_agents, current_node, caught_cost, 
                                                                      agents_active, agent_values)
+
             accumulated_reward += added_reward      
             if caught:
                 return accumulated_reward, visited_states, cached_q_values, other_agent_visited_states
@@ -292,7 +293,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
             total_steps += 1
         
         # OTHER AGENT'S TURN
-        else:
+        elif interactive:
             if agents_active[current_actor]:
                 other_agent_nodes = current_node[np.arange(len(current_node)) != current_actor]
                 feature_consumption = tuple(itemgetter(*agent_preferences[current_actor])(consumed_features))

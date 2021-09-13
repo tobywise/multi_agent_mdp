@@ -155,6 +155,7 @@ class MaxCausalEntIRL(BaseIRL):
         _, q_values = self._solve_value_iteration(theta, mdp.features, self.max_iter, self.discount, mdp.sas, self.tol, self.soft)
         self.q_values = q_values
 
+
         # Get policy
         pi = self.action_selector.get_pi_p(q_values)
 
@@ -299,7 +300,7 @@ class HyptestIRL(BaseIRL):
     """
 
     def __init__(self, learning_rate:float=0.3, decay:int=1, theta:np.ndarray=None, 
-                 tol:float=1e-8, VI_discount:float=0.9, VI_max_iter:int=500, soft:bool=True):
+                 tol:float=1e-8, VI_discount:float=0.9, VI_max_iter:int=500, soft:bool=True, normalisation:str='relative'):
         """
         Infers an agent's reward function by testing discrete hypotheses regarding their preference for different
         features.
@@ -315,7 +316,9 @@ class HyptestIRL(BaseIRL):
             VI_discount (float, optional): Value iteration discount factor. Defaults to 0.9.
             VI_max_iter (int, optional): Maximum number of VI iterations. Defaults to 500.
             soft (bool, optional): Whether to use "soft" value iteration (i.e. incorporating a softmax). 
-            If false, uses standard value iteration.
+            If false, uses standard value iteration. Defaults to True.
+            normalisation (str, optional): Method to use for normalising values across hypotheses. Can be one of 'relative' or 
+            'z-score'. Defaults to 'relative'.
         """
 
         # Settings for value iteration
@@ -331,6 +334,7 @@ class HyptestIRL(BaseIRL):
         self.learning_rate_decay = decay
         self.original_theta = np.array(theta).copy()
         self.theta = theta
+        self.normalisation = normalisation
 
     def _single_move(self, start:int, next_state:int, sas:np.ndarray, q_values:Union[np.ndarray, None], 
                     features:np.ndarray, exclude_features:List=[]) -> Union[np.ndarray, np.ndarray]:
@@ -380,7 +384,10 @@ class HyptestIRL(BaseIRL):
         _, actions, _ = get_actions_states(sas, start)
 
         # Z score the Q value according to each hypothesis within each action
-        state_Q[actions, :] = zscore_nb(state_Q[actions, :])
+        if self.normalisation == 'z-score':
+            state_Q[actions, :] = zscore_nb(state_Q[actions, :])
+        elif self.normalisation == 'relative':
+            raise NotImplementedError
 
         # Get the Q values according to each hypothesis given the action taken
         reward_weights = state_Q[next_action, :]  

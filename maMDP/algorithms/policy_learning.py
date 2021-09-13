@@ -3,6 +3,7 @@ import numpy as np
 from typing import Union, List
 from ..mdp import MDP
 from .irl import BaseIRL
+from copy import deepcopy
 
 def degdist(x, y):
     """
@@ -26,8 +27,16 @@ class BaseGeneralPolicyLearner() :
         """ Estimates Q values for each action"""
         pass
 
+    @abstractmethod
+    def get_q_values(self, state:int):
+        """ Get Q values for a certain state """
+
     def reset(self):
         pass
+
+    def copy(self):
+
+        return deepcopy(self)
 
 class TDGeneralPolicyLearner(BaseGeneralPolicyLearner):
     """ 
@@ -57,6 +66,7 @@ class TDGeneralPolicyLearner(BaseGeneralPolicyLearner):
         self.ls = ls
         self.original_Q = np.array(Q).copy()
         self.n_states = 1
+        self.fit_complete = False
 
         self.Q = Q 
 
@@ -64,6 +74,7 @@ class TDGeneralPolicyLearner(BaseGeneralPolicyLearner):
         """ Resets the estimate to its initial state """
         self.Q = self.original_Q
         self.reset_learning_rate()
+        self.fit_complete = False
 
     def reset_learning_rate(self):
         """ Resets the adjusted learning rate"""
@@ -81,38 +92,40 @@ class TDGeneralPolicyLearner(BaseGeneralPolicyLearner):
 
         # Loop through trajectories
         for n, trajectory in enumerate(trajectories):
+            # Only fit if this trajectory contains observations - allows for emtpy trajectories to return Q values in the
+            # absence of observations
+            if len(trajectory):
+                # Convert state-action pairs
+                action = mdp[n]._trajectory_to_state_action(trajectory)[:, 1].astype(int)
 
-            # Convert state-action pairs
-            action = mdp[n]._trajectory_to_state_action(trajectory)[:, 1].astype(int)
+                # Loop through individual actions within each trajectory
+                for n, a in enumerate(action):
+                    
+                    trial_reward = np.zeros(mdp[n].n_actions)
 
-            # Loop through individual actions within each trajectory
-            for n, a in enumerate(action):
-                
-                trial_reward = np.zeros(mdp[n].n_actions)
+                    # Calculate "reward"
+                    if not self.kernel:
+                        trial_reward[int(a)] += 1  # Add 1 to chosen action
+                    else:
+                        trial_reward = deg_sq_exp_kernel(np.arange(mdp[n].n_actions) * (360 / mdp[n].n_actions), 
+                                                        a * (360 / mdp[n].n_actions), ls=self.ls) 
 
-                # Calculate "reward"
-                if not self.kernel:
-                    trial_reward[int(a)] += 1  # Add 1 to chosen action
-                else:
-                    trial_reward = deg_sq_exp_kernel(np.arange(mdp[n].n_actions) * (360 / mdp[n].n_actions), 
-                                                    a * (360 / mdp[n].n_actions), ls=self.ls) 
+                    # Error
+                    delta = trial_reward - self.Q
 
-                # Error
-                delta = trial_reward - self.Q
+                    # Adjust learning rate
+                    if self.learning_rate_decay > 0:
+                        self._adjusted_learning_rate = self._adjusted_learning_rate * np.power(self.n_states, -self.learning_rate_decay)
+                        self.Q += self._adjusted_learning_rate * delta
 
-                # Adjust learning rate
-                if self.learning_rate_decay > 0:
-                    self._adjusted_learning_rate = self._adjusted_learning_rate * np.power(self.n_states, -self.learning_rate_decay)
-                    self.Q += self._adjusted_learning_rate * delta
+                    # No learning rate adjustment
+                    else:
+                        self.Q += self.learning_rate * delta
 
-                # No learning rate adjustment
-                else:
-                    self.Q += self.learning_rate * delta
-
-                self.n_states += 1
+                    self.n_states += 1
 
 
-    def fit(self, mdp:Union[MDP, List[MDP]], trajectories:list) -> np.ndarray:
+    def fit(self, mdp:Union[MDP, List[MDP]], trajectories:list):
         """
         Uses hypothesis testing IRL to infer the reward function of an agent based on supplied
         trajectories within a given MDP.
@@ -122,11 +135,9 @@ class TDGeneralPolicyLearner(BaseGeneralPolicyLearner):
             trajectories (list): List of lists of visited states - i.e. a list of trajectories, with each trajectory
             being a list of visited states.
 
-        Returns:
-            np.ndarray: Inferred reward function
         """
 
-        if not len(trajectories[0]):
+        if not isinstance(trajectories, list) and isinstance(trajectories[0], list):
             raise TypeError("Trajectories must be a list of lists - i.e. a list of trajectories, with each trajectory \
                             representing a list of states")
 
@@ -137,6 +148,19 @@ class TDGeneralPolicyLearner(BaseGeneralPolicyLearner):
             mdp = [mdp] * len(trajectories)  # Repeat the MDP to match the number of trajectories
 
         self._fit_TD_policy(mdp, trajectories)
+
+        self.fit_complete = True
+
+    def get_q_values(self, state: int) -> np.ndarray:
+        """        
+        Returns Q values for a given state. As this is a model-free algorithms, all states have the same Q values.
+
+        Args:
+            state (int): State to get Q values for. NOTE: Q values are the same for every state, this is provided for consistency.
+
+        Returns:
+            np.ndarray: Q values for each action
+        """
 
         return self.Q
 

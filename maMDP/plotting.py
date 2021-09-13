@@ -119,6 +119,29 @@ def plot_trajectory(ax, trajectory:List[Tuple], colour:str='black',
 
     return ax
 
+def plot_sequence(ax, trajectory:List[Tuple], colour:str='black', 
+                    size:int=10, *args, **kwargs):
+    """
+    Plots a trajectory as a sequence of numbers
+
+    Args:
+        ax (plt.axes): Axes on which to plot
+        trajectory (List[Tuple]): Trajectory of state indices
+        colour (str, optional): Colour of the numbers. Defaults to 'black'.
+        size (int, optional): Size of the numbers.
+
+    """
+                    
+    ## Iteratively plot numbers.
+    for i in range(len(trajectory)):
+
+        x, y = trajectory[i]
+        
+        ## Plot.
+        ax.text(x-0.25, y-0.25, str(i+1), color=colour, size=size, *args, **kwargs)
+
+    return ax
+
 
 # HEX GRID PLOTTING FUNCTIONS
 def draw_hexagons(X, outer_radius=1, edgecolor='#787878', ax=None, alpha=None,
@@ -196,14 +219,12 @@ def plot_hex_grids(grids:np.ndarray, colours:List[str]=None, alphas:List[float]=
         cmap = colors.LinearSegmentedColormap.from_list('singleColour', [colour, colour], N=2)  # Single colour colormap
         colour_array = colors.Normalize(0, 1, clip=True)(grids[grid])
         colour_array = cmap(colour_array)
-
+        
         if alphas is None:
             alpha = 0.5
         else:
             alpha = alphas[grid]
-
-        colour_array[..., -1] = grids[grid] * alpha # Set alpha dependent on intensity
-
+        colour_array[..., -1] = colors.Normalize(0, 1, clip=True)(grids[grid]) * alpha # Set alpha dependent on intensity
         draw_hexagons(colour_array, linewidth=0, ax=ax, return_coords=False)
 
     coords = draw_hexagons(np.ones((grids.shape[1], grids.shape[2])), ax=ax, 
@@ -245,7 +266,7 @@ def plot_hex_grid_values(grid:np.ndarray, cmap:str='viridis', ax=None, *args, **
     coords = draw_hexagons(np.ones((grid.shape[0], grid.shape[1])), ax=ax, 
                            facecolor=(0, 0, 0, 0), return_coords=True)
     ax.set_xticks(np.arange(-.5, grid.shape[0], 1));
-    ax.set_yticks(np.arange(-.5, grid.shape[0], 1));
+    ax.set_yticks(np.arange(-.5, grid.shape[1], 1));
     for tic in ax.xaxis.get_major_ticks():
         tic.tick1line.set_visible(False)
         tic.tick2line.set_visible(False)

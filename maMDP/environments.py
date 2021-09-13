@@ -179,7 +179,7 @@ class Environment():
         return caught
 
     def step_multi(self, agent_name:str, n_steps:int=None, refit:bool=False, progressbar:bool=False,
-                  adjust_planning_steps:bool=True) -> List[int]:
+                  adjust_planning_steps:bool=True, stop_on_caught:bool=True) -> List[int]:
         """
         Moves an agent multiple steps within the environment.
 
@@ -189,11 +189,12 @@ class Environment():
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
             Defaults to False.
+            progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
             adjust_planning_steps (bool or int, optional). If true, the number of steps used for the planning algorithm (if it plans
             for a set number of steps, like MCTS) is adjusted based on the number of steps the agent is expected to make (as set in the 
             `agent.n_steps` attribute). If an int is provided, this (minus 1 for each move made) will be used as the number of planning 
             steps instead. Defaults to True.
-            progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
+            stop_on_caught (bool, optional): If true, stops moving agents when one of them gets caught.
 
         Returns:
             List[int]: States the agent has moved to.
@@ -221,6 +222,13 @@ class Environment():
                     self.fit(agent_name)
             self.step(agent_name)
             positions.append(self.agents[agent_name].position)
+
+            # Check if the agent got caught
+            caught = self._check_agents_caught(agent_name)
+
+            if caught and stop_on_caught:
+                warnings.warn("Agent was caught, stopping")
+                return False
 
         return positions
 
@@ -258,14 +266,17 @@ class Environment():
         for i in steps:
             
             for agent_name in agent_names:
+
                 if refit:
                     if adjust_planning_steps:
-                        self.step_multi(agent_name, agent_steps[agent_name], refit=refit, adjust_planning_steps=int((agent_steps[agent_name] * n_steps) - i))
+                        positions = self.step_multi(agent_name, agent_steps[agent_name], refit=refit, 
+                                                    adjust_planning_steps=int((agent_steps[agent_name] * n_steps) - i), stop_on_caught=stop_on_caught)
                     else:
-                        self.step_multi(agent_name, agent_steps[agent_name], refit=refit)
+                        positions = self.step_multi(agent_name, agent_steps[agent_name], refit=refit, stop_on_caught=stop_on_caught)
                 # self.step_multi(agent_name, agent_steps[agent_name], refit=refit)
-                caught = self._check_agents_caught(agent_name)
-                if caught and stop_on_caught:
+                # caught = self._check_agents_caught(agent_name)
+
+                if positions == False and stop_on_caught:
                     warnings.warn("Agent was caught, stopping")
                     return
 
@@ -407,6 +418,21 @@ class Environment():
         
         # Convert trajectory of state IDs to 
         self.mdp.plot_trajectory(ax=ax, trajectory=trajectory, *args, **kwargs)
+
+    def plot_sequence(self, trajectory:List[int], ax:plt.axes, *args, **kwargs):
+        """
+        Plots a trajectory in the underlying MDP (if it implements the appropriate plotting function) with
+        numbers representing each step in the trajectory.
+
+        See the plot_sequence() method of the MDP class for more information.
+
+        Args:
+            trajectory (List[int]): List of visited states
+            ax (plt.axes): Axes on which to plot the trajectory
+        """
+        
+        # Convert trajectory of state IDs to 
+        self.mdp.plot_sequence(ax=ax, trajectory=trajectory, *args, **kwargs)
 
     def plot_state_values(self, agent_name:str, *args, **kwargs) -> plt.axes:
         """
