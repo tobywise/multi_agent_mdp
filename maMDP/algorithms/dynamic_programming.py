@@ -129,13 +129,13 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
     return values, delta, q_values
 
 @njit
-def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_iter:int, 
+def solve_value_iteration(reward_weights:np.ndarray, features:np.ndarray, max_iter:int, 
                           discount:float, sas:np.ndarray, tol:float, soft=False) -> Tuple[np.ndarray, np.ndarray]:
     """
     Solves a given MDP using Value Iteration, given a certain reward function.
 
     Args:
-        reward_function (np.ndarray): Reward function, 1D array with one entry per feature
+        reward_weights (np.ndarray): Reward function, 1D array with one entry per feature
         features (np.ndarray): 2D array of features of shape (n_features, n_states)
         max_iter (int): Maximum number of iterations to run
         discount (float): Discount factor
@@ -158,7 +158,7 @@ def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_i
     values_ = np.zeros(n_states)
 
     # Get state rewards based on the supplied reward function
-    reward_ = np.dot(reward_function.astype(np.float64), features)
+    reward_ = np.dot(reward_weights.astype(np.float64), features)
 
     # Until converged   
     for _ in range(max_iter):
@@ -206,30 +206,30 @@ class ValueIteration(Algorithm):
         
         super().__init__()
 
-    def _solve_value_iteration(self, reward_function, features, max_iter, discount, sas, tol):
+    def _solve_value_iteration(self, reward_weights, features, max_iter, discount, sas, tol):
         """ Method used to solve value iteration - this could be implemented in _fit() but this allows _fit()
         to be overrideen without losing the functionality of the solve method """
 
         # Solve using value iteration
-        values, q_values = solve_value_iteration(reward_function, features, max_iter, discount, sas, tol)
+        values, q_values = solve_value_iteration(reward_weights, features, max_iter, discount, sas, tol)
 
         return values, q_values
 
 
-    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps) -> Union[np.ndarray, np.ndarray]:
+    def _fit(self, mdp:MDP, reward_weights:np.ndarray, position, n_steps) -> Union[np.ndarray, np.ndarray]:
         """
         Uses value iteration to solve the MDP
 
         Args:
             mdp (MDP): The MDP to solve
-            reward_function (np.ndarray): Reward function of the agent
+            reward_weights (np.ndarray): Reward function of the agent
 
         Returns:
             Union[np.ndarray, np.ndarray]: Returns value function and q values as numpy arrays
         """
 
         # Solve using value iteration
-        values, q_values = self._solve_value_iteration(np.array(reward_function), mdp.features, self.max_iter, self.discount, mdp.sas, self.tol)
+        values, q_values = self._solve_value_iteration(np.array(reward_weights), mdp.features, self.max_iter, self.discount, mdp.sas, self.tol)
 
         return values, q_values
 

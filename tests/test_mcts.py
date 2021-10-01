@@ -25,8 +25,8 @@ def example_agent_info():
 def example_info_for_agent_values():
     agents = range(3)
     agent_idx = {2: 0, 3: 1, 4: 2}
-    primary_agent_reward_function = np.array([0, 1, 0, 2, 3])
-    return (agents, agent_idx, primary_agent_reward_function)
+    primary_agent_reward_weights = np.array([0, 1, 0, 2, 3])
+    return (agents, agent_idx, primary_agent_reward_weights)
 
 @pytest.fixture
 def example_info_for_agent_consumes():
@@ -49,7 +49,7 @@ def state_visitation_fixture():
 
 def test_extract_agent_info(example_agent_info):
     single_agent_info = dict([list(example_agent_info.items())[0]])
-    agent_idx, current_node, n_moves, consumes_features, reward_functions = extract_agent_info(single_agent_info)
+    agent_idx, current_node, n_moves, consumes_features, agent_reward_weights = extract_agent_info(single_agent_info)
 
     assert agent_idx == {2: 0}
     assert current_node == np.array([2])
@@ -59,14 +59,14 @@ def test_extract_agent_info(example_agent_info):
     expected_consumes_features[0, [1, 4]] = 1
 
     assert np.all(consumes_features == expected_consumes_features)
-    assert reward_functions.shape == (1, 5)
-    assert np.all(reward_functions[0, :] == np.array([0, 1, 0, 1, 2]))
+    assert agent_reward_weights.shape == (1, 5)
+    assert np.all(agent_reward_weights[0, :] == np.array([0, 1, 0, 1, 2]))
 
 
 def test_get_agent_values(example_info_for_agent_values):
-    agents, agent_idx, primary_agent_reward_function = example_info_for_agent_values
+    agents, agent_idx, primary_agent_reward_weights = example_info_for_agent_values
 
-    agent_values = get_agent_values(agents, agent_idx, primary_agent_reward_function)
+    agent_values = get_agent_values(agents, agent_idx, primary_agent_reward_weights)
 
     assert agent_values == (0, 2, 3)
 

@@ -58,7 +58,7 @@ def hex_env_to_dict(env:Environment, feature_names:List=None, format:str='index'
 
         agent_dict[agent_name]['n_moves'] = agent.n_moves
 
-        agent_dict[agent_name]['reward_function'] = [int(i) for i in list(agent.reward_function)]
+        agent_dict[agent_name]['reward_weights'] = [int(i) for i in list(agent.reward_weights)]
         agent_dict[agent_name]['consumes'] = agent.consumes
 
         agent_dict[agent_name]['algorithm'] = agent.algorithm.name
@@ -136,7 +136,7 @@ def hex_environment_from_dict(env_dict, feature_names=[]):
             new_agent = Agent(agent_name, n_moves=agent_info['n_moves'], algorithm=algorithm, algorithm_kwargs=agent_info['algorithm_kwargs'],
                               action_selector=action_selector, action_kwargs=agent_info['action_kwargs'])
             
-            agent_dict[new_agent] = (agent_info['position'], agent_info['reward_function'], agent_info['consumes'])
+            agent_dict[new_agent] = (agent_info['position'], agent_info['reward_weights'], agent_info['consumes'])
         
         newEnvironment = Environment(newMDP, agent_dict)
 

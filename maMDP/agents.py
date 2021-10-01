@@ -3,7 +3,7 @@ from .environments import Environment
 from .algorithms.dynamic_programming import ValueIteration
 from operator import pos
 import numpy as np
-from .mdp import MDP
+from .mdp import MDP, Observation, Trajectory
 from .algorithms.base import Algorithm
 from .algorithms.action_selection import *
 from typing import Dict
@@ -11,7 +11,7 @@ from .plotting import plot_agent
 import matplotlib.pyplot as plt
 from typing import List
 import warnings
-
+from copy import copy
 
 class Agent():
     """
@@ -53,9 +53,9 @@ class Agent():
         self.name = name
         self.n_moves = n_moves
 
-    def _attach(self, mdp:MDP, env:Environment, index:int, position:int, reward_function:np.ndarray, consumes:List[int]=[]):
+    def _attach(self, mdp:MDP, env:Environment, index:int, position:int, reward_weights:np.ndarray, consumes:List[int]=[]):
 
-        return AttachedAgent(name=self.name, n_moves=self.n_moves, reward_function=reward_function, consumes=consumes,
+        return AttachedAgent(name=self.name, n_moves=self.n_moves, reward_weights=reward_weights, consumes=consumes,
                              algorithm=self.algorithm, action_selector=self.action_selector, 
                              parent_mdp=mdp, parent_environment=env, position=position, index=index,
                              action_kwargs=self.action_kwargs, algorithm_kwargs=self.algorithm_kwargs)
@@ -64,16 +64,16 @@ class Agent():
 class AttachedAgent():
     """ Internal class - do not use directly """
 
-    def __init__(self, name: str, n_moves:int, reward_function:np.ndarray, consumes:List[int],
+    def __init__(self, name: str, n_moves:int, reward_weights:np.ndarray, consumes:List[int],
                 algorithm: Algorithm, action_selector: ActionSelector, 
                 parent_mdp:MDP, parent_environment:Environment, position:int, index:int,
                 action_kwargs:Dict, algorithm_kwargs:Dict):
        
         self.name = name
         self.n_moves = n_moves
-        self.reward_function = reward_function
+        self.reward_weights = reward_weights
         self.consumes = consumes
-        self.consumed = np.zeros(len(reward_function))
+        self.consumed = np.zeros(len(reward_weights))
 
         self.action_selector = action_selector
         self.action_kwargs = action_kwargs
@@ -96,6 +96,7 @@ class AttachedAgent():
         self.__starting_position = None
         self.position = position
         self.position_history = [self.__starting_position]
+        self.observation_history = Trajectory(self._parent_mdp, self, [])
 
         # Policy
         self.pi = None
@@ -153,10 +154,19 @@ class AttachedAgent():
         self.pi_p = self.action_selector.get_pi_p(self.__algorithm.q_values)
         self.pi = self.action_selector.get_pi(self.__algorithm.q_values)
 
-    def fit(self, n_steps:bool=None, **kwargs):
+    def fit(self, n_steps:int=None, n_observations:int=None, **kwargs):
+
+        # Calculate reward function
+        self.reward_function_ = np.dot(self.reward_weights.astype(np.float64), self._parent_mdp.features)
+
+        # Get number of observations to use
+        if n_observations is not None:
+            observations = self.observation_history.subset(slice(-n_observations, None))  
+        else:
+            observations = self.observation_history
 
         # Solve MDP
-        self.__algorithm.fit(self.__parent_mdp, self.reward_function, self.position, n_steps, **kwargs)
+        self.__algorithm.fit(self.__parent_mdp, observations, self.reward_weights, self.position, n_steps, **kwargs)
 
         # Get policy
         self.get_policy()
@@ -166,17 +176,31 @@ class AttachedAgent():
         if not self.__algorithm.fit_complete:
             raise AttributeError("Agent has not been fit yet")
 
+        # Calculate reward function
+        self.reward_function_ = np.dot(self.reward_weights.astype(np.float64), self._parent_mdp.features)
+
+        # Get deterministic policy (if policy is stochastic, this will randomly select an action according to given probabilities)
         self.get_policy()
 
         if self.pi[self.position] < 0:
             raise ValueError("No valid action for this state. State action values for the current state may not have been estimated yet.")
 
+        # Get the results of taking this action
+        state_1 = copy(self.position)
+        action = copy(self.pi[self.position])
         next_state = self._parent_mdp.get_next_state(self.position, self.pi[self.position])
+        reward = copy(self.reward_function_[next_state])
+        
+        obs = Observation(state_1, action, next_state, reward, False)
+        self.obs = obs
 
         # Move the agent
         self.position = int(next_state)
         self.position_history.append(self.position)
+        self.observation_history.append(obs)
         self.__parent_mdp.update_agent_feature(self.agent_idx, self.position)
+
+        return obs
 
     def step_proba(self, position:np.ndarray=None) -> np.ndarray:
         """
@@ -227,6 +251,7 @@ class AttachedAgent():
         self.pi = None
         self.pi_p = None
         self.position_history = [self.__starting_position]
+        self.observation_history = Trajectory(self._parent_mdp, self, [])
 
     def plot(self, ax:plt.axes, marker:str="X", *args, **kwargs):
         """

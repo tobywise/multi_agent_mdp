@@ -5,8 +5,8 @@ from .grid_utils import get_action_from_states_hex, get_action_from_states_squar
 from abc import ABCMeta, abstractmethod
 from .plotting import plot_grids, plot_trajectory, plot_grid_values, plot_hex_grids, plot_hex_grid_values, plot_sequence
 import matplotlib.pyplot as plt
+from dataclasses import dataclass
 
-# TODO add something to convert MDP SAS to generator for use with MCTS
 
 class MDP():
     """
@@ -556,7 +556,7 @@ class SquareGridMDP(GridMDP):
             raise AttributeError("Values should be provided as a flat, 1D array with one value per state")
 
         values = self.flat_to_grid(values)
-        ax = plot_grid_values(values, cmap=cmap, ax=ax, *args, **kwargs)
+        ax = plot_grid_values(values.T, cmap=cmap, ax=ax, *args, **kwargs)
 
         return ax
 
@@ -652,3 +652,69 @@ class HexGridMDP(GridMDP):
         ax, self.coords = plot_hex_grid_values(values, cmap=cmap, *args, **kwargs)
 
         return ax
+
+@dataclass
+class Observation:
+    """
+    Represents a single observation of an action taken in an MDP. 
+
+    Args:
+        state_1 (int): Starting state
+        action (int): Action taken in state 1
+        state_2 (int): State reached when taking the action in state 1
+        reward (float): The reward gained from taking the action in state 1
+        caught (bool): Whether the agent got caught by a predator
+    """
+    
+    state_1: int
+    action: int
+    state_2: int
+    reward: float
+    caught: bool
+
+@dataclass
+class Trajectory:
+    """Represent's an agent's trajectory within an MDP
+    
+    Args:
+        mdp (MDP): The MDP the agent is acting within
+        agent (Agent): The agent onject
+        observations (List[Observation]): List of observations, each of which contains information about
+        1) the starting state, 2) the action taken, 3) the next state, 4) the reward received, 5) Whether the agent got caught by a predator
+    """
+
+    mdp: MDP
+    agent: 'Agent'
+    observations: List[Observation]
+
+    @property
+    def length(self):
+        self.__length = len(self.observations)
+        return self.__length
+
+    @property
+    def total_reward(self):
+        rew = 0
+        for i in self.observations:
+            rew += i.reward
+        return rew
+
+    def __len__(self):
+        return len(self.observations)
+
+    def get_positions(self):
+        """ Returns a list of states occupied by the agent """
+        return [self.observations[0].state_1] + [i.state_2 for i in self.observations]
+
+    def __getitem__(self, idx:int) -> Observation:
+        return self.observations[idx]
+
+    def __setitem__(self, idx:int, obs:Observation):
+        self.observations[idx] = obs
+
+    def append(self, obs:Observation):
+        self.observations.append(obs)
+
+    def subset(self, idx:slice) -> 'Trajectory':
+        """ Returns a Trajectory with a subset of the original observations """
+        return Trajectory(self.mdp, self.agent, self.observations[idx])

@@ -142,10 +142,10 @@ class MaxCausalEntIRL(BaseIRL):
         # Get state visitation frequencies
         self.D_ = state_visitation_iterator(mdp.sas, n_iter, pi, p_zero)
 
-    def _solve_value_iteration(self, reward_function, features, max_iter, discount, sas, tol, soft):
+    def _solve_value_iteration(self, reward_weights, features, max_iter, discount, sas, tol, soft):
 
         # Solve using value iteration
-        values, q_values = solve_value_iteration(reward_function, features, max_iter, discount, sas, tol, soft)
+        values, q_values = solve_value_iteration(reward_weights, features, max_iter, discount, sas, tol, soft)
 
         return values, q_values
 

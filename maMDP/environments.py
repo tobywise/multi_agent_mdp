@@ -1,10 +1,10 @@
 import numpy as np
-from .mdp import MDP
+from .mdp import MDP, Trajectory
 from typing import List, Union, Tuple, Dict
 import matplotlib.pyplot as plt
 from fastprogress import progress_bar
 import warnings
-
+from copy import copy
 
 
 class Environment():
@@ -63,32 +63,32 @@ class Environment():
 
         for n, agent_object in enumerate(agents.keys()):
 
-            position, reward_function, consumes = agents[agent_object]
+            position, reward_weights, consumes = agents[agent_object]
 
             # Check supplied values are correct
-            if not isinstance(reward_function, np.ndarray) and not isinstance(reward_function, list):
-                raise TypeError('Agent {0}: Reward function must be a 1D array or list, got type {1}'.format(agent_object.name, reward_function))
+            if not isinstance(reward_weights, np.ndarray) and not isinstance(reward_weights, list):
+                raise TypeError('Agent {0}: Reward function must be a 1D array or list, got type {1}'.format(agent_object.name, reward_weights))
 
-            reward_function = np.array(reward_function)
+            reward_weights = np.array(reward_weights)
 
-            if not reward_function.ndim == 1:
+            if not reward_weights.ndim == 1:
                 raise AttributeError("Agent {0}: Reward function array must be 1-dimensional".format(agent_object.name))
 
             if not isinstance(position, int):
                 raise TypeError('Agent {0}: Position should be an int'.format(agent_object.name))
 
-            if not len(reward_function) == original_mdp_n_features + self.n_agents:
+            if not len(reward_weights) == original_mdp_n_features + self.n_agents:
                 raise AttributeError("Agent {0}: Agent reward function must have the same number of entries"
                                     "as the MDP has features plus number of agents. Reward function has {1} entries, "
-                                    "MDP has {2} features, {3} agents provided".format(agent_object.name, len(reward_function), 
+                                    "MDP has {2} features, {3} agents provided".format(agent_object.name, len(reward_weights), 
                                     original_mdp_n_features, self.n_agents))
 
-            if any([i > len(reward_function) - 1 for i in consumes]):
+            if any([i > len(reward_weights) - 1 for i in consumes]):
                 raise ValueError("Agent {0}: Provided a feature to consume that is out of range. Indexes provided = {1}, reward "
-                                "function indicates {2} features".format(agent_object.name, consumes, len(reward_function)))
+                                "function indicates {2} features".format(agent_object.name, consumes, len(reward_weights)))
             
             
-            agent_object = agent_object._attach(self.mdp, self, n, position, reward_function, consumes)
+            agent_object = agent_object._attach(self.mdp, self, n, position, reward_weights, consumes)
             self.__agents[agent_object.name] = agent_object
 
     def _check_agent_name(self, agent_name:str):
@@ -97,17 +97,18 @@ class Environment():
         if not agent_name in self.agent_names:
             raise ValueError("Agent named {0} is not present in the environment, valid names are {1}".format(agent_name, self.agent_names))
 
-    def fit(self, agent_name:str, n_steps:int=None):
+    def fit(self, agent_name:str, n_steps:int=None, n_observations:int=None):
         """
         Calculates action values for a given agent.
 
         Args:
             agent_name (str): Name of the agent to fit.
             n_steps (int, optional): Number of steps to plan ahead, if used by the algorithm. Defaults to None.
+            n_observations (int, optional): Number of recent observations to learn from, if used by the algorithm. Defaults to None.
         """
 
         self._check_agent_name(agent_name)
-        self.agents[agent_name].fit(n_steps=n_steps)
+        self.agents[agent_name].fit(n_steps=n_steps, n_observations=n_observations)
 
     def step(self, agent_name:str, n_steps:int=None) -> int:
         """
@@ -122,14 +123,15 @@ class Environment():
         """
 
         self._check_agent_name(agent_name)
-        self.agents[agent_name].step()
+
+        obs = self.agents[agent_name].step()
 
         # Consume features if necessary - i.e. set feature to zero
         self._consume_features(agent_name)
 
         self.n_steps += 1
 
-        return self.agents[agent_name].position
+        return obs
 
     def step_proba(self, agent_name:str, position:int=None) -> np.ndarray:
         """
@@ -179,7 +181,7 @@ class Environment():
         return caught
 
     def step_multi(self, agent_name:str, n_steps:int=None, refit:bool=False, progressbar:bool=False,
-                  adjust_planning_steps:bool=True, stop_on_caught:bool=True) -> List[int]:
+                  n_observations:int=1, adjust_planning_steps:bool=True, stop_on_caught:bool=True) -> List[int]:
         """
         Moves an agent multiple steps within the environment.
 
@@ -190,6 +192,9 @@ class Environment():
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error. 
             Defaults to False.
             progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
+            n_observations (int, optional). Number of observations to supply to the algorithm, where 1 represents just the most recent
+            algorithm, 2 the 2 the most recent etc. Useful for model-free algorithms that may only learn from the most recent 
+            observation. If set to None, all observations are used. By default, only the most recent observation is used. Defaults to 1.
             adjust_planning_steps (bool or int, optional). If true, the number of steps used for the planning algorithm (if it plans
             for a set number of steps, like MCTS) is adjusted based on the number of steps the agent is expected to make (as set in the 
             `agent.n_steps` attribute). If an int is provided, this (minus 1 for each move made) will be used as the number of planning 
@@ -210,27 +215,28 @@ class Environment():
         else:
             steps = range(n_steps)
 
-        positions = []
+        observations = []
 
         for i in steps:
             if refit:
                 if adjust_planning_steps == True:
-                    self.fit(agent_name, n_steps - i)
+                    self.fit(agent_name, n_steps - i, n_observations)
                 elif isinstance(adjust_planning_steps, int):
-                    self.fit(agent_name, adjust_planning_steps - i)
+                    self.fit(agent_name, adjust_planning_steps - i, n_observations)
                 else:
-                    self.fit(agent_name)
-            self.step(agent_name)
-            positions.append(self.agents[agent_name].position)
+                    self.fit(agent_name, n_observations=n_observations)
+            obs = self.step(agent_name)
+            observations.append(obs)
 
             # Check if the agent got caught
             caught = self._check_agents_caught(agent_name)
 
             if caught and stop_on_caught:
                 warnings.warn("Agent was caught, stopping")
-                return False
+                observations[-1].caught = True
+                return Trajectory(self.mdp, self.agents[agent_name], observations)
 
-        return positions
+        return Trajectory(self.mdp, self.agents[agent_name], observations)
 
     def step_multi_interactive(self, agent_names:List[str]=None, n_steps:int=10, refit:bool=False, progressbar:bool=False,
                                stop_on_caught:bool=True, adjust_planning_steps:bool=True):
@@ -269,14 +275,12 @@ class Environment():
 
                 if refit:
                     if adjust_planning_steps:
-                        positions = self.step_multi(agent_name, agent_steps[agent_name], refit=refit, 
+                        observations = self.step_multi(agent_name, agent_steps[agent_name], refit=refit, 
                                                     adjust_planning_steps=int((agent_steps[agent_name] * n_steps) - i), stop_on_caught=stop_on_caught)
                     else:
-                        positions = self.step_multi(agent_name, agent_steps[agent_name], refit=refit, stop_on_caught=stop_on_caught)
-                # self.step_multi(agent_name, agent_steps[agent_name], refit=refit)
-                # caught = self._check_agents_caught(agent_name)
+                        observations = self.step_multi(agent_name, agent_steps[agent_name], refit=refit, stop_on_caught=stop_on_caught)
 
-                if positions == False and stop_on_caught:
+                if observations[-1].caught and stop_on_caught:
                     warnings.warn("Agent was caught, stopping")
                     return
 

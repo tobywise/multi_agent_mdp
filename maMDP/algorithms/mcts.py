@@ -37,7 +37,7 @@ def get_actions_states(sas, current_node):
 
 
 @njit
-def get_opponent_next_state(opponent_policy_method:str, states:list, current_state:int, reward_function:np.ndarray, 
+def get_opponent_next_state(opponent_policy_method:str, states:list, current_state:int, reward_weights:np.ndarray, 
                             features:np.ndarray, sas:np.ndarray, action_selection:str='max', softmax_temperature:float=1, 
                             max_iter:int=500, discount:float=0.9, tol:float=1e-4, q_values=None):
 
@@ -48,7 +48,7 @@ def get_opponent_next_state(opponent_policy_method:str, states:list, current_sta
 
         # Get q values, if not provided
         if q_values is None:
-            _, q_values = solve_value_iteration(reward_function, features, max_iter, discount, sas, tol)
+            _, q_values = solve_value_iteration(reward_weights, features, max_iter, discount, sas, tol)
 
         # Get action
         if action_selection == 'max':
@@ -174,7 +174,7 @@ def check_agent_overlap(consumes_agents:Tuple[Tuple[int]], current_node:np.ndarr
 # @njit
 def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray, features:np.ndarray, 
                    current_node:np.ndarray, cached_q_values:List[Dict[Tuple, np.ndarray]], n_moves:Tuple[int], consumes_agents:np.ndarray,
-                   consumes_features:np.ndarray, agent_values:Tuple[float], reward_functions:np.ndarray, agent_feature_idx:List[int],
+                   consumes_features:np.ndarray, agent_values:Tuple[float], agent_reward_weights:np.ndarray, agent_feature_idx:List[int],
                    n_steps:int, C:float, caught_cost:float=-50, opponent_policy_method:str='solve', opponent_action_selection:str='max', 
                    softmax_temperature:float=1, caching:bool=False, return_other_agent_states:bool=False, 
                    VI_max_iter:int=500, VI_discount:float=0.9, 
@@ -197,7 +197,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
         consumes_features (np.ndarray): Which agents consume which features. Boolean array of shape (n agents X n features), where true
         indicates agent X consumes feature Y.
         agent_values (Tuple[float]): Value of consuming each agent. Keys = agent names, values = value gained from consuming.
-        reward_functions (np.ndarray): Reward function for each agent. Shape = (n_agents x n_features).
+        agent_reward_weights (np.ndarray): Reward function for each agent. Shape = (n_agents x n_features).
         agent_feature_idx (List[int]). Indices of features corresponding to each agent in the MDP.
         n_steps (int): Number of moves made by the primary agent.
         C (float): Exploration parameter.
@@ -246,7 +246,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
     # Which features each agent cares about (i.e. where reward function has zero weight)
     agent_preferences = []
     for agent in range(n_agents):
-        agent_preferences.append(np.where(reward_functions[agent, :] != 0)[0].tolist())
+        agent_preferences.append(np.where(agent_reward_weights[agent, :] != 0)[0].tolist())
     
     total_steps = 0
 
@@ -278,7 +278,7 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
         if current_actor == 0:
 
             # Recalculate rewards - may have changed as features are consumed
-            rewards = np.dot(reward_functions[0, :].astype(np.float64), features)
+            rewards = np.dot(agent_reward_weights[0, :].astype(np.float64), features)
 
             # Get next node
             current_node[0], expand = MCTS_next_node(expand, V, N, states, C, current_node[0])
@@ -301,14 +301,14 @@ def mcts_iteration(interactive:bool, V:np.ndarray, N:np.ndarray, sas:np.ndarray,
                 if caching and (tuple(other_agent_nodes), feature_consumption) in cached_q_values[current_actor]:
                     cache_used += 1
                     current_node[current_actor], q_values = get_opponent_next_state(opponent_policy_method, states, current_node[current_actor],
-                                                                                    reward_functions[current_actor, :], features, sas, opponent_action_selection,
+                                                                                    agent_reward_weights[current_actor, :], features, sas, opponent_action_selection,
                                                                                     softmax_temperature, max_iter=VI_max_iter, 
                                                                                     discount=VI_discount, tol=VI_tol, 
                                                                                     q_values=cached_q_values[current_actor][(tuple(other_agent_nodes), 
                                                                                                                             feature_consumption)])
                 else:
                     current_node[current_actor], q_values = get_opponent_next_state(opponent_policy_method, states, current_node[current_actor],
-                                                                                    reward_functions[current_actor, :], features, sas, opponent_action_selection,
+                                                                                    agent_reward_weights[current_actor, :], features, sas, opponent_action_selection,
                                                                                     softmax_temperature, max_iter=VI_max_iter, 
                                                                                     discount=VI_discount, tol=VI_tol, q_values=None)
                     if caching:
@@ -353,7 +353,7 @@ def extract_agent_info(agent_info:Dict[str, Tuple[int, int, List[int], np.ndarra
     current_node = []
     n_moves = []
     consumes_features = []
-    reward_functions = []
+    agent_reward_weights = []
 
     for n, agent in enumerate(agent_info.keys()):
         this_agent_info = agent_info[agent]
@@ -364,19 +364,19 @@ def extract_agent_info(agent_info:Dict[str, Tuple[int, int, List[int], np.ndarra
         consumes = np.zeros_like(this_agent_info[3])
         consumes[this_agent_info[2]] = 1
         consumes_features.append(consumes)
-        reward_functions.append(this_agent_info[3])
+        agent_reward_weights.append(this_agent_info[3])
 
-    reward_functions = np.stack(reward_functions)
+    agent_reward_weights = np.stack(agent_reward_weights)
     current_node = np.array(current_node)
     n_moves = tuple(n_moves)
     consumes_features = np.stack(consumes_features).astype(bool)
 
-    assert reward_functions.shape[0] == len(current_node), 'Reward function is wrong shape (shape = {0})'.format(reward_functions.shape)
+    assert agent_reward_weights.shape[0] == len(current_node), 'Reward function is wrong shape (shape = {0})'.format(agent_reward_weights.shape)
 
-    return agent_idx, current_node, n_moves, consumes_features, reward_functions
+    return agent_idx, current_node, n_moves, consumes_features, agent_reward_weights
 
 def get_agent_values(agents:List[int], agent_idx:Dict[int, str], 
-                     primary_agent_reward_function:np.ndarray) -> Dict[str, float]:
+                     primary_agent_reward_weights:np.ndarray) -> Dict[str, float]:
     """ Determines the value of each agent to the primary agent """
 
     agent_values = np.zeros(len(agents))
@@ -385,7 +385,7 @@ def get_agent_values(agents:List[int], agent_idx:Dict[int, str],
             for k, v in agent_idx.items():
 
                 if v == agent:
-                    agent_values[agent] = primary_agent_reward_function[k]
+                    agent_values[agent] = primary_agent_reward_weights[k]
     
     agent_values = tuple(agent_values)
 
@@ -411,15 +411,15 @@ def extract_all_agent_info(agent_info:Dict[str, Tuple[int, int, List[int], np.nd
                            opponent_info: Dict[str, Tuple[int, int, List[int], np.ndarray, int]]):
 
     # Extract agent info
-    agent_idx, current_node, n_moves, consumes_features, reward_functions = extract_agent_info({**agent_info, **opponent_info})
+    agent_idx, current_node, n_moves, consumes_features, agent_reward_weights = extract_agent_info({**agent_info, **opponent_info})
     # Get value of consuming each agent
-    agent_values = get_agent_values(range(len(current_node)), agent_idx, reward_functions[0, :])
+    agent_values = get_agent_values(range(len(current_node)), agent_idx, agent_reward_weights[0, :])
             
     # Determine which agent eats which other agent
     consumes_agents = get_agent_consumes(consumes_features, agent_idx)
 
     return current_node, n_moves, consumes_features,\
-           reward_functions, agent_values, consumes_agents, list(agent_idx.keys())
+           agent_reward_weights, agent_values, consumes_agents, list(agent_idx.keys())
 
 
 # @njit(parallel=False)
@@ -461,7 +461,7 @@ def run_mcts(interactive:bool, n_iter:int, features:np.ndarray, sas:np.ndarray,
         Union[np.ndarray, np.ndarray]: Returns the value of each state and the number of times each state has been visited.
     """
 
-    current_node, n_moves, consumes_features, reward_functions, \
+    current_node, n_moves, consumes_features, agent_reward_weights, \
     agent_values, consumes_agents, agent_idx = extract_all_agent_info(agent_info, opponent_info)
 
     # Remove agent features
@@ -484,7 +484,7 @@ def run_mcts(interactive:bool, n_iter:int, features:np.ndarray, sas:np.ndarray,
         accumulated_reward, visited_states, \
         cached_q_values, other_agent_visited_states = mcts_iteration(interactive, V, N, sas, features, current_node, cached_q_values,
                                                                      n_moves, consumes_agents, consumes_features, agent_values,
-                                                                     reward_functions, agent_idx, n_steps, C, caught_cost, 
+                                                                     agent_reward_weights, agent_idx, n_steps, C, caught_cost, 
                                                                      opponent_policy_method, opponent_action_selection, softmax_temperature, 
                                                                      cache, return_other_agent_states, **VI_kwargs)
 
@@ -511,7 +511,7 @@ def get_MCTS_action_values(node:int, sas:np.ndarray, V:np.ndarray, N:np.ndarray)
         return actions, action_values, states
 
 @njit
-def solve_all_value_iteration(sas, predator_reward_function, features, prey_index, max_iter=None, tol=None, discount=None):
+def solve_all_value_iteration(sas, predator_reward_weights, features, prey_index, max_iter=None, tol=None, discount=None):
 
     all_q_values = np.zeros((sas.shape[0], sas.shape[0], sas.shape[1]))  # Prey idx X opponent_states X actions
 
@@ -522,7 +522,7 @@ def solve_all_value_iteration(sas, predator_reward_function, features, prey_inde
         features[prey_index, prey_state] = 1
 
         # Do value iteration
-        _, all_q_values[prey_state, ...] = solve_value_iteration(sas.shape[0], sas.shape[1], predator_reward_function, features, max_iter, discount, sas, tol)
+        _, all_q_values[prey_state, ...] = solve_value_iteration(sas.shape[0], sas.shape[1], predator_reward_weights, features, max_iter, discount, sas, tol)
 
     return all_q_values
 
@@ -581,11 +581,11 @@ class MCTS(Algorithm):
     def clear_cache(self):
         self.cache = None
 
-    def create_agent_info(self, reward_function:np.ndarray, interactive:bool, mdp:MDP) -> Union[Dict, Dict]:
+    def create_agent_info(self, reward_weights:np.ndarray, interactive:bool, mdp:MDP) -> Union[Dict, Dict]:
         """ Creates information about agents in the environment to be used by the MCTS algorithm.
 
         Args:
-            reward_function (np.ndarray): Primary agent reward function.
+            reward_weights (np.ndarray): Primary agent reward function.
             interactive (bool): If true, provides information on other agents.
             mdp (MDP): The MDP being used
 
@@ -596,7 +596,7 @@ class MCTS(Algorithm):
         primary_agent_name = self._agent.name
         
         agent_info = {primary_agent_name: (self._agent.position, self._agent.n_moves, self._agent.consumes, 
-                                          reward_function, self._agent.agent_feature_idx)}
+                                          reward_weights, self._agent.agent_feature_idx)}
 
         opponent_info = {}
 
@@ -604,11 +604,11 @@ class MCTS(Algorithm):
             for agent_name, agent in self._environment.agents.items():
                 if not agent_name == self._agent.name:
                     opponent_info[agent_name] = (agent.position, agent.n_moves, agent.consumes, 
-                                                agent.reward_function, agent.agent_feature_idx)
+                                                agent.reward_weights, agent.agent_feature_idx)
 
         return agent_info, opponent_info
 
-    def _fit(self, mdp, reward_function, position, n_steps):
+    def _fit(self, mdp, reward_weights, position, n_steps):
 
         if n_steps is None:
             n_steps = self.n_steps
@@ -624,7 +624,7 @@ class MCTS(Algorithm):
             self.cache = None
 
         # Get information about primary and other agents
-        agent_info, opponent_info = self.create_agent_info(reward_function, self.interactive, mdp)
+        agent_info, opponent_info = self.create_agent_info(reward_weights, self.interactive, mdp)
 
         # Run MCTS
         self.V, self.N, \
