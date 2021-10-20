@@ -1,4 +1,4 @@
-from .base import Algorithm
+from .base import MBAlgorithm
 from numba import njit
 import numpy as np
 from typing import Dict, Tuple, List, Union
@@ -527,7 +527,7 @@ def solve_all_value_iteration(sas, predator_reward_weights, features, prey_index
     return all_q_values
 
 
-class MCTS(Algorithm):
+class MCTS(MBAlgorithm):
     """
     Implements Monte Carlo Tree Search, with optional interactivity (i.e. accounting for other agents' actions).
     """

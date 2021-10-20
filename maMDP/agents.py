@@ -53,10 +53,11 @@ class Agent():
         self.name = name
         self.n_moves = n_moves
 
-    def _attach(self, mdp:MDP, env:Environment, index:int, position:int, reward_weights:np.ndarray, consumes:List[int]=[]):
+    def _attach(self, mdp:MDP, env:Environment, index:int, position:int, reward_weights:np.ndarray, 
+                consumes:List[int]=[]):
 
-        return AttachedAgent(name=self.name, n_moves=self.n_moves, reward_weights=reward_weights, consumes=consumes,
-                             algorithm=self.algorithm, action_selector=self.action_selector, 
+        return AttachedAgent(name=self.name, n_moves=self.n_moves, reward_weights=reward_weights, 
+                             consumes=consumes, algorithm=self.algorithm, action_selector=self.action_selector, 
                              parent_mdp=mdp, parent_environment=env, position=position, index=index,
                              action_kwargs=self.action_kwargs, algorithm_kwargs=self.algorithm_kwargs)
 
@@ -64,8 +65,8 @@ class Agent():
 class AttachedAgent():
     """ Internal class - do not use directly """
 
-    def __init__(self, name: str, n_moves:int, reward_weights:np.ndarray, consumes:List[int],
-                algorithm: Algorithm, action_selector: ActionSelector, 
+    def __init__(self, name: str, n_moves:int, reward_weights:np.ndarray, 
+                consumes:List[int], algorithm: Algorithm, action_selector: ActionSelector, 
                 parent_mdp:MDP, parent_environment:Environment, position:int, index:int,
                 action_kwargs:Dict, algorithm_kwargs:Dict):
        
@@ -142,12 +143,23 @@ class AttachedAgent():
             raise ValueError("Position must be less than the number of states in the parent MDP. " 
                              "Provided position {0}, MDP has {1} states".format(self._parent_mdp.n_states))
 
+        # Store position for resetting later
         if self.__starting_position is None:
             self.__starting_position = new_position
 
+        # Update the relevant agent feature in the parent MDP
         self.__parent_mdp.update_agent_feature(self.agent_idx, new_position)
 
+        # Update position
         self.__position = new_position
+
+    def _sas_changed(self):
+        """ If the parent MDP's SAS changed """
+        self.algorithm._sas_changed()
+
+    def _features_changed(self):
+        """ If the parent MDP's SAS changed """
+        self.algorithm._features_changed()
 
     def get_policy(self):
 
@@ -170,13 +182,37 @@ class AttachedAgent():
 
         # Get policy
         self.get_policy()
+
+    def move(self, action:int):
+        """ Takes the supplied action from the current state, moves the agent accordingly and records the result """
+
+        # Get the results of taking this action
+        state_1 = copy(self.position)
+        next_state = self._parent_mdp.get_next_state(self.position, action)
+
+        # Update reward function  - use random feature samples
+        self.reward_function_ = np.dot(self.reward_weights.astype(np.float64), self._parent_mdp.sample_features())
+        # Get reward
+        reward = copy(self.reward_function_[next_state])
+        
+        # Create observation
+        obs = Observation(state_1, action, next_state, reward, False)
+        self.obs = obs
+
+        # Move the agent
+        self.position = int(next_state)
+        self.position_history.append(self.position)
+        self.observation_history.append(obs)
+
+        return obs
         
     def step(self):
+        """ Takes a step based on the results of the algorithm """
 
         if not self.__algorithm.fit_complete:
             raise AttributeError("Agent has not been fit yet")
 
-        # Calculate reward function
+        # Calculate reward function - uses mean features
         self.reward_function_ = np.dot(self.reward_weights.astype(np.float64), self._parent_mdp.features)
 
         # Get deterministic policy (if policy is stochastic, this will randomly select an action according to given probabilities)
@@ -185,20 +221,11 @@ class AttachedAgent():
         if self.pi[self.position] < 0:
             raise ValueError("No valid action for this state. State action values for the current state may not have been estimated yet.")
 
-        # Get the results of taking this action
-        state_1 = copy(self.position)
+        # Get the action to be taken
         action = copy(self.pi[self.position])
-        next_state = self._parent_mdp.get_next_state(self.position, self.pi[self.position])
-        reward = copy(self.reward_function_[next_state])
-        
-        obs = Observation(state_1, action, next_state, reward, False)
-        self.obs = obs
 
         # Move the agent
-        self.position = int(next_state)
-        self.position_history.append(self.position)
-        self.observation_history.append(obs)
-        self.__parent_mdp.update_agent_feature(self.agent_idx, self.position)
+        obs = self.move(action)
 
         return obs
 

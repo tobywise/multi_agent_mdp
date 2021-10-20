@@ -8,7 +8,7 @@ long_description = (here / 'readme.md').read_text(encoding='utf-8')
 
 setup(
     name='maMDP',  
-    version='0.1',  
+    version='0.2',  
     description='A package for multi-agent MDPs',  
     long_description=long_description,
     long_description_content_type='text/markdown',  

@@ -6,14 +6,16 @@ from abc import ABCMeta, abstractmethod
 from .plotting import plot_grids, plot_trajectory, plot_grid_values, plot_hex_grids, plot_hex_grid_values, plot_sequence
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
-
+from numba.experimental import jitclass
+from numba import int32, float64, boolean
 
 class MDP():
     """
     Represents a fully observable MDP.
     """
 
-    def __init__(self, features:np.ndarray, sas:np.ndarray, walls:np.ndarray=None, seed:int=None):
+    def __init__(self, features:np.ndarray, sas:np.ndarray, walls:np.ndarray=None, 
+                features_sd:np.ndarray=None, terminal_states:List[int]=None, seed:int=None):
         """
         Base class representing a Markov Decision Process (MDP) with features. Each state can have multiple features.
 
@@ -23,15 +25,22 @@ class MDP():
             features (np.ndarray): Array of features in each state, shape (n_features, n_states)
             sas (np.ndarray): Array representing the probability of transitioning from state S to state S' given action A. Of shape (states, actions, states). 
             walls (np.ndarray, optional): An array specifying the location of walls in the grid. Defaults to None.
+            features_sd (np.ndarray, optional): An array specifying the standard deviation of the generating distribution for features. This
+            allows for varying intensity of a featurs on different encounters, providing agents with varying outcomes. This can be specified as an
+            array of shape (n_features, n_stattes), in which case each state has a different SD. Alternatively, it can be specified as a 1D array
+            with as many entries as there are features, in which case each state has the same SD for that feature. If None, features are deterministic
+            (i.e. 0 variance). Defaults to None.
+            terminal_states (List[int], optional): Terminal states, supplied as a list. On entering these states,
+            the agent cannot move any further (i.e. all actions lead nowhere).
             seed (int, optional): RNG seed. Defaults to None.
         """
 
 
         self.sas = sas
         self.__original_sas = sas.copy()  # Save in case we need to reset
-        self.features = features
-        self.__n_non_agent_features = features.shape[0]
+        self.set_features(features, features_sd)
         self.n_agents = 0
+        self.terminal_states = terminal_states
 
         # Add walls
         if walls is not None:
@@ -40,6 +49,7 @@ class MDP():
             self.walls = np.zeros(self.sas.shape[0])
 
         # Set RNG
+        self.seed = seed
         if seed is not None:
             self.rng = np.random.default_rng(seed=seed)
         else:
@@ -75,6 +85,11 @@ class MDP():
         self.n_states = sas.shape[0]
         self.n_actions = sas.shape[1]
         self.__sas = sas
+
+        # Update environment & agents
+        if hasattr(self, '__environment'):
+            self.__environment._sas_changed()
+        
         
     @property
     def n_features(self):
@@ -84,8 +99,22 @@ class MDP():
     def features(self):
         return self.__feature_array
 
-    @features.setter
-    def features(self, features:np.ndarray):
+    @property
+    def features_sd(self):
+        return self.__feature_sd_array
+
+    def set_features(self, features:np.ndarray, features_sd:np.ndarray=None):
+        """
+        Sets the features of the MDP.
+
+        Args:
+            features (np.ndarray): Array of features in each state, shape (n_features, n_states)
+            features_sd (np.ndarray, optional): An array specifying the standard deviation of the generating distribution for features. This
+            allows for varying intensity of a featurs on different encounters, providing agents with varying outcomes. This can be specified as an
+            array of shape (n_features, n_stattes), in which case each state has a different SD. Alternatively, it can be specified as a 1D array
+            with as many entries as there are features, in which case each state has the same SD for that feature. If None, features are deterministic
+            (i.e. 0 variance). Defaults to None.
+        """
 
         # Get features
         if not isinstance(features, np.ndarray):
@@ -94,12 +123,71 @@ class MDP():
             raise AttributeError('Feature array should contain as many states as the adjacency matrix ' +
                                 'Expected {0} states, found {1}'.format(self.n_states, features.shape[1]))
 
+        if features_sd is not None:
+            features_sd = np.array(features_sd)
+            if features_sd.ndim == 1 and not len(features_sd) == features.shape[0]:
+                raise AttributeError('Features SD array should have the same number of entries as the feature' +
+                                    'array. Feature array has ({0}) features, feature SD array has ({1})'.format(len(features_sd), 
+                                                                                                                features.shape[0]))
+
+            elif features_sd.ndim == 2:
+                if not features_sd.shape[0] == features.shape[0]:
+                    raise AttributeError('Features SD array should have the same number of entries as the feature' +
+                                        'array. Feature array has ({0}) features, feature SD array has ({1})'.format(features_sd.shape[0], 
+                                                                                                                features.shape[0]))
+
+                if not features_sd.shape[1] == features.shape[1]:
+                    raise AttributeError('Features SD array should have the same number of states as the feature' +
+                                        'array. Feature array has ({0}) states, feature SD array has ({1})'.format(features_sd.shape[1], 
+                                                                                                            features.shape[1]))
+            elif features_sd.ndim > 2:
+                raise AttributeError('Feature SD array is an invalid shape ({0})'.format(features_sd.shape))
+
+            # If given 1D variance, convert it to a 2D array
+            if features_sd.ndim == 1:
+                features_sd_array = np.ones_like(features)
+                features_sd_array *= features_sd[:, None]
+                features_sd_array[features == 0] = 0  # Zero variance where there are no features
+                features_sd = features_sd_array
+
         self.__n_features = features.shape[0]
         self.__feature_array = features
         self.__original_feature_array = features.copy()
+        self.__n_non_agent_features = features.shape[0]
+        self.__feature_sd_array = features_sd
 
         # Name features
         self.feature_names = ['Feature_{0}'.format(i) for i in range(self.n_features)]
+
+        # Update environment & agents
+        if hasattr(self, '__environment'):
+            self.__environment._features_changed()
+
+    def sample_features(self):
+        """ Returns a random sample of environment features, if noise is provided through the features_sd option """
+
+        # If there's no randomness, just return the features
+        if self.features_sd is None:
+            return self.features
+        
+        else:
+            # Generate random numbers
+            random_features = self.rng.randn(*self.features.shape)
+            # Adjust SD, randn generates with SD=1
+            random_features *= self.features_sd
+            # Add mean
+            random_features += self.features
+
+            return random_features
+
+    def sample_state_features(self, state_idx:int):
+        """ Samples a single state's features """
+
+        outcome = np.random.randn(self.n_features)
+        features = self.features[:, state_idx]
+        features_sd = self.features_sd[:, state_idx]
+
+        return outcome * features_sd + features
 
     @property
     def walls(self):
@@ -122,9 +210,9 @@ class MDP():
         # Check shape etc
         if not walls.ndim == 1:
             raise AttributeError("Array specifying walls must be 1 dimensional")
-        if not walls.shape == np.product(self.shape):
+        if not walls.shape[0] == self.n_states:
             raise AttributeError("Walls array must have the same number of entries as the number of states. Expected {0}, "
-                                "got {1}".format(self.sas.shape[0], walls.shape))
+                                "got {1}".format(self.n_states, walls.shape[0]))
         if not np.all(np.isin(walls, [0, 1])):
             raise ValueError("Wall array values must be either 0 (no wall) or 1 (wall)")
 
@@ -154,7 +242,13 @@ class MDP():
         agent_features = np.zeros((self.n_states))
         agent_features[position] = 1
 
-        self.features = np.vstack([self.features, agent_features[None, :]])
+        if self.features_sd is not None:
+            agent_features_sd = np.zeros((self.n_states))       
+            self.set_features(np.vstack([self.features, agent_features[None, :]]), 
+                            np.vstack([self.features_sd, agent_features_sd[None, :]]))
+        else:
+            self.set_features(np.vstack([self.features, agent_features[None, :]]), None)
+
 
     def update_agent_feature(self, agent_idx:int, position:int):
         """
@@ -291,6 +385,10 @@ class MDP():
     def reset(self):
         self.features = self.__original_feature_array
 
+    def copy(self):
+        """ Returns a copy of the MDP by itself, without information about agents etc """
+        return MDP(self.features.copy(), self.sas.copy(), self.walls.copy(), self.seed)
+
     # Plotting functions
     def plot(self, colours:list=None, alphas:list=None, ax=None, *args, **kwargs):
         """ Must be overriden when subclassing to enable plotting methods """
@@ -307,11 +405,14 @@ class MDP():
     def state_to_position(self):
         """ Must be overriden when subclassing to enable plotting methods """
         raise NotImplementedError("This MDP does not implement plotting functions")
+        
 
 
 class GridMDP(MDP, metaclass=ABCMeta):
 
-    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False):
+    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False,
+                 features_sd:np.ndarray=None, self_transition_on_invalid:bool=False, terminal_states:List[int]=None,
+                 seed:int=None):
         """
         Creates a deterministic MDP representing a hexagonal grid with a given shape. Uses offset coordinates ("odd-q").
 
@@ -322,17 +423,37 @@ class GridMDP(MDP, metaclass=ABCMeta):
             walls (np.ndarray, optional): 1D array specifying wallled states. Defaults to None.
             shape (tuple, optional): shape of the grid, width by height. Defaults to (10, 15).
             self_transitions (bool, optional): Whether to allow . Defaults to True.
+            features_sd (np.ndarray, optional): An array specifying the standard deviation of the generating distribution for features. This
+            allows for varying intensity of a featurs on different encounters, providing agents with varying outcomes. This can be specified as an
+            array of shape (n_features, n_stattes), in which case each state has a different SD. Alternatively, it can be specified as a 1D array
+            with as many entries as there are features, in which case each state has the same SD for that feature. If None, features are deterministic
+            self_transition_on_invalid (bool, optional): If true, selecting an invalid action will result in moving
+            to the same state (i.e. staying in the same place), rather than being impossible. Defaults to False.
+            terminal_states (List[int], optional): Terminal states, supplied as a list. On entering these states,
+            the agent cannot move any further (i.e. all actions lead nowhere).
+            seed (int, optional): RNG seed. Defaults to None.
         """
         
         self.shape = shape
         self.grid = np.zeros(self.shape)
         self.self_transitions = self_transitions
+        self.self_transition_on_invalid = self_transition_on_invalid
 
         # Get state IDs and coordinates
         self.state_ids, self.grid_coords = grid_coords(self.grid)
 
         # Get SAS
         sas = self._get_sas()
+
+        # Deal with invalid transitions
+        if self.self_transition_on_invalid:
+            sas = self._make_invalid_transitions(sas)
+
+        # Stop the agent from moving anywhere once it reaches a terminal state
+        if terminal_states is not None:
+            for s in terminal_states:
+                sas[s, :, :] = 0
+                sas[s, :, s] = 1
 
         if not isinstance(sas, np.ndarray):
             raise TypeError("SAS must be a numpy array")
@@ -342,7 +463,7 @@ class GridMDP(MDP, metaclass=ABCMeta):
             raise AttributeError("Number of states on first dimension must equal number of"
                                  "states in last dimension. Got {0} and {1}".format(sas.shape[0], sas.shape[1]))
 
-        super().__init__(features, sas, walls)
+        super().__init__(features, sas, walls, features_sd, terminal_states, seed)
 
     @abstractmethod
     def _get_sas(self) -> np.ndarray:
@@ -353,6 +474,18 @@ class GridMDP(MDP, metaclass=ABCMeta):
             np.ndarray: State, action, state transition function
         """
         return 
+
+    def _make_invalid_transitions(self, sas):
+
+        n_states = sas.shape[0]
+        n_actions = sas.shape[1]
+
+        for s in range(n_states):
+            for a in range(n_actions):
+                if sas[s, a, :].sum() == 0:  # If action leads nowhere
+                    sas[s, a, s] = 1  # Action leads to same state
+
+        return sas
 
     def get_state_coords(self, state:int):
 
@@ -371,7 +504,6 @@ class GridMDP(MDP, metaclass=ABCMeta):
 
     def idx_to_state(self, idx:tuple):
         return np.ravel_multi_index(idx, self.shape)
-
 
     def add_wall_xy(self, x:Tuple[int], y:Tuple[int]):
         """
@@ -406,7 +538,6 @@ class GridMDP(MDP, metaclass=ABCMeta):
 
         self.walls *= 0
 
-
     def plot_trajectory(self, trajectory:List[int], ax:plt.axes, colour:str='black', 
                         head_width:int=0.3, head_length:int=0.3, *args, **kwargs) -> plt.axes:
         """
@@ -430,7 +561,6 @@ class GridMDP(MDP, metaclass=ABCMeta):
                                 head_length=head_length, *args, **kwargs)
 
         return ax
-
 
     def plot_sequence(self, trajectory:List[int], ax:plt.axes, colour:str='black', 
                       size:int=10, *args, **kwargs) -> plt.axes:
@@ -458,7 +588,8 @@ class GridMDP(MDP, metaclass=ABCMeta):
 
 class SquareGridMDP(GridMDP):
 
-    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False):
+    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False,
+                 features_sd:np.ndarray=None, self_transition_on_invalid:bool=False, terminal_states:List[int]=None, seed:int=None):
         """
         Creates a deterministic MDP representing a grid.
 
@@ -467,9 +598,19 @@ class SquareGridMDP(GridMDP):
             walls (np.ndarray, optional): 1D array specifying wallled states. Defaults to None.
             shape (tuple, optional): Shape of the grid, width by height. Defaults to (10, 15).
             self_transitions (bool, optional): Whether to allow . Defaults to True.
+            features_sd (np.ndarray, optional): An array specifying the standard deviation of the generating distribution for features. This
+            allows for varying intensity of a featurs on different encounters, providing agents with varying outcomes. This can be specified as an
+            array of shape (n_features, n_stattes), in which case each state has a different SD. Alternatively, it can be specified as a 1D array
+            with as many entries as there are features, in which case each state has the same SD for that feature. If None, features are deterministic
+            self_transition_on_invalid (bool, optional): If true, selecting an invalid action will result in moving
+            to the same state (i.e. staying in the same place), rather than being impossible. Defaults to False.
+            terminal_states (List[int], optional): Terminal states, supplied as a list. On entering these states,
+            the agent cannot move any further (i.e. all actions lead nowhere).
+            seed (int, optional): RNG seed. Defaults to None.
         """
 
-        super().__init__(features=features, walls=walls, shape=shape, self_transitions=self_transitions)
+        super().__init__(features=features, walls=walls, shape=shape, self_transitions=self_transitions, features_sd=features_sd,
+                        self_transition_on_invalid=self_transition_on_invalid, terminal_states=terminal_states, seed=seed)
 
     def _get_sas(self):
 
@@ -569,7 +710,8 @@ class SquareGridMDP(GridMDP):
     
 class HexGridMDP(GridMDP):
 
-    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False):
+    def __init__(self, features:np.ndarray, walls:np.ndarray=None, shape:tuple=(10, 15), self_transitions:bool=False,
+                 self_transition_on_invalid:bool=False, terminal_states:List[int]=None):
         """
         Creates a deterministic MDP representing a hexagonal grid with a given shape. Uses offset coordinates ("odd-q").
 
@@ -578,9 +720,14 @@ class HexGridMDP(GridMDP):
             walls (np.ndarray, optional): 1D array specifying wallled states. Defaults to None.
             shape (tuple, optional): Shape of the grid, width by height. Defaults to (10, 15).
             self_transitions (bool, optional): Whether to allow . Defaults to True.
+            self_transition_on_invalid (bool, optional): If true, selecting an invalid action will result in moving
+            terminal_states (List[int], optional): Terminal states, supplied as a list. On entering these states,
+            the agent cannot move any further (i.e. all actions lead nowhere).
+            to the same state (i.e. staying in the same place), rather than being impossible. Defaults to False.
         """
 
-        super().__init__(features=features, walls=walls, shape=shape, self_transitions=self_transitions)
+        super().__init__(features=features, walls=walls, shape=shape, self_transitions=self_transitions, 
+                        self_transition_on_invalid=self_transition_on_invalid, terminal_states=terminal_states)
 
     def _get_sas(self):
 
@@ -653,7 +800,36 @@ class HexGridMDP(GridMDP):
 
         return ax
 
-@dataclass
+# @dataclass
+# class Observation:
+#     """
+#     Represents a single observation of an action taken in an MDP. 
+
+#     Args:
+#         state_1 (int): Starting state
+#         action (int): Action taken in state 1
+#         state_2 (int): State reached when taking the action in state 1
+#         reward (float): The reward gained from taking the action in state 1
+#         caught (bool): Whether the agent got caught by a predator
+#     """
+    
+#     state_1: int
+#     action: int
+#     state_2: int
+#     reward: float
+#     caught: bool
+
+
+
+observation_spec = [
+    ('state_1', int32),            
+    ('action', int32), 
+    ('state_2', int32),            
+    ('reward', float64), 
+    ('caught', boolean)
+]
+
+@jitclass(observation_spec)
 class Observation:
     """
     Represents a single observation of an action taken in an MDP. 
@@ -665,12 +841,14 @@ class Observation:
         reward (float): The reward gained from taking the action in state 1
         caught (bool): Whether the agent got caught by a predator
     """
-    
-    state_1: int
-    action: int
-    state_2: int
-    reward: float
-    caught: bool
+
+    def __init__(self, state_1: int, action: int, state_2: int, reward: float, caught: bool):
+            
+        self.state_1 = state_1
+        self.action = action
+        self.state_2 = state_2
+        self.reward = reward
+        self.caught = caught
 
 @dataclass
 class Trajectory:
@@ -710,6 +888,7 @@ class Trajectory:
         return self.observations[idx]
 
     def __setitem__(self, idx:int, obs:Observation):
+        assert isinstance(obs, Observation), 'Observation must be of the Observation class'
         self.observations[idx] = obs
 
     def append(self, obs:Observation):
@@ -718,3 +897,8 @@ class Trajectory:
     def subset(self, idx:slice) -> 'Trajectory':
         """ Returns a Trajectory with a subset of the original observations """
         return Trajectory(self.mdp, self.agent, self.observations[idx])
+
+    def remove_same_state(self):
+        """ Removes observations where the the agent didn't move, for example due to taking an invalid action """
+
+        self.observations = [i for i in self.observations if not i.state_1 == i.state_2]

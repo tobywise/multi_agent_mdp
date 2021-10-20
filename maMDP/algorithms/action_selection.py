@@ -1,8 +1,10 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Union, Tuple
 import numpy as np
+from numba import njit
 
-def softmax(qs, temperature=1):
+@njit
+def softmax(qs, temperature:float=1):
 
     # No valid transitions
     if np.all(np.isneginf(qs)):
@@ -38,10 +40,6 @@ def random_max(x:np.ndarray, rng:np.random.RandomState=None):
     return rng.choice(np.where(x == x.max())[0])
 
 class ActionSelector(metaclass=ABCMeta):
-    """
-    Base class for action selectors. These take a Q values for each state-action pair
-    and calculate action probabilities and selected actions.
-    """
 
     def get_pi(self, q_values:np.ndarray, *args, **kwargs) -> np.ndarray:
         """

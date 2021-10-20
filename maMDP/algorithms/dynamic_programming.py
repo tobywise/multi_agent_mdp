@@ -5,7 +5,7 @@ import warnings
 from scipy.optimize import minimize
 from numba import jit, njit, prange
 from typing import Union, Tuple
-from .base import Algorithm
+from .base import MBAlgorithm
 from ..mdp import MDP
 
 @njit
@@ -183,8 +183,7 @@ def solve_value_iteration(reward_weights:np.ndarray, features:np.ndarray, max_it
 
 
 
-# TODO add soft option
-class ValueIteration(Algorithm):
+class ValueIteration(MBAlgorithm):
 
     def __init__(self, discount:float=0.9, tol:float=1e-8, max_iter:int=500):
         """
@@ -216,7 +215,7 @@ class ValueIteration(Algorithm):
         return values, q_values
 
 
-    def _fit(self, mdp:MDP, reward_weights:np.ndarray, position, n_steps) -> Union[np.ndarray, np.ndarray]:
+    def _fit(self, mdp:MDP, reward_weights:np.ndarray, position, n_steps, q_values=None) -> Union[np.ndarray, np.ndarray]:
         """
         Uses value iteration to solve the MDP
 

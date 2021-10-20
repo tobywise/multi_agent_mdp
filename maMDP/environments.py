@@ -1,5 +1,5 @@
 import numpy as np
-from .mdp import MDP, Trajectory
+from .mdp import MDP, Observation, Trajectory
 from typing import List, Union, Tuple, Dict
 import matplotlib.pyplot as plt
 from fastprogress import progress_bar
@@ -44,13 +44,14 @@ class Environment():
     def agents(self):
         return self.__agents
 
-    def _set_mdp_and_agents(self, agents:Dict['Agent', Tuple[int, np.ndarray, List[int]]], mdp):
+    def _set_mdp_and_agents(self, agents:Dict['Agent', Tuple[int, np.ndarray, List[int]]], mdp:MDP):
 
         # Get number of agents
         self.n_agents = len(agents)
         self.agent_names = [agent.name for agent in agents.keys()]
         
         self.__mdp = mdp
+        self.__mdp.__environment = self
 
         # Remove any agent-related features that may already be present in the MDP
         if self.__mdp.n_agents > 0:
@@ -90,6 +91,19 @@ class Environment():
             
             agent_object = agent_object._attach(self.mdp, self, n, position, reward_weights, consumes)
             self.__agents[agent_object.name] = agent_object
+
+    def _sas_changed(self):
+        """ Tell agents that the MDP's transition structure has changed """
+        
+        for agent in self.agents:
+            agent._sas_changed()
+
+    def _features_changed(self):
+        """ Tell agents that the MDP's features have changed """
+        
+        for agent in self.agents:
+            agent._features_changed()
+
 
     def _check_agent_name(self, agent_name:str):
         """ Utility function to check that a given agent name is in the environment """
@@ -181,7 +195,8 @@ class Environment():
         return caught
 
     def step_multi(self, agent_name:str, n_steps:int=None, refit:bool=False, progressbar:bool=False,
-                  n_observations:int=1, adjust_planning_steps:bool=True, stop_on_caught:bool=True) -> List[int]:
+                  n_observations:int=1, adjust_planning_steps:bool=True, stop_on_caught:bool=True,
+                  stop_states:List[int]=None) -> List[int]:
         """
         Moves an agent multiple steps within the environment.
 
@@ -200,6 +215,7 @@ class Environment():
             `agent.n_steps` attribute). If an int is provided, this (minus 1 for each move made) will be used as the number of planning 
             steps instead. Defaults to True.
             stop_on_caught (bool, optional): If true, stops moving agents when one of them gets caught.
+            stop_states (List[int], optional): States where the agent should stop. Defaults to None.
 
         Returns:
             List[int]: States the agent has moved to.
@@ -234,6 +250,10 @@ class Environment():
             if caught and stop_on_caught:
                 warnings.warn("Agent was caught, stopping")
                 observations[-1].caught = True
+                return Trajectory(self.mdp, self.agents[agent_name], observations)
+
+            # Check if the agent reached a state where it should stop
+            if stop_states is not None and self.agents[agent_name].position in stop_states:
                 return Trajectory(self.mdp, self.agents[agent_name], observations)
 
         return Trajectory(self.mdp, self.agents[agent_name], observations)
@@ -318,6 +338,27 @@ class Environment():
 
         self._check_agent_name(agent_name)
         return self.agents[agent_name].position_history
+
+    def move_agent(self, agent_name:str, action:int) -> Observation:
+        """
+        Make an agent take the given action from its current state. Returns an observation representing
+        the stating state, action taken, state reached, and reward received.
+
+        Args:
+            agent_name (str): Agent to move
+            action (int): Action for the agent to take.
+
+        Returns:
+            Observation: Observation representing the stating state, action taken, state reached, and reward received.
+        """
+
+        self._check_agent_name(agent_name)
+        return self.agents[agent_name].move(action)
+
+    def get_agent_observation_history(self, agent_name:str) -> Trajectory:
+
+        self._check_agent_name(agent_name)
+        return self.agents[agent_name].observation_history
 
     def get_agent_q_values(self, agent_name:str) -> np.ndarray:
         """

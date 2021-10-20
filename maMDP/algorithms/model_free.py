@@ -112,7 +112,7 @@ class QLearning(MFAlgorithm):
         self.initialise_et_algorithm(self.q_values.shape[0], self.q_values.shape[1])
 
     def initialise_et_algorithm(self, n_states:int, n_actions:int):
-        print('Initialising eligibility trace algorithm')
+        # print('Initialising eligibility trace algorithm')
         self.et_algorithm = self.eligibility_trace_algorithm(n_states, n_actions, **self.eligibility_trace_kwargs)
 
     def get_next_state_q(self, obs:Observation) -> float:
@@ -173,9 +173,6 @@ class QLearning(MFAlgorithm):
 
 
     def update_eligibility_trace(self, obs:Observation):
-
-        
-
         pass
 
 
