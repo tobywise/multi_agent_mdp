@@ -155,7 +155,6 @@ class MaxCausalEntIRL(BaseIRL):
         _, q_values = self._solve_value_iteration(theta, mdp.features, self.max_iter, self.discount, mdp.sas, self.tol, self.soft)
         self.q_values = q_values
 
-
         # Get policy
         pi = self.action_selector.get_pi_p(q_values)
 
@@ -171,16 +170,21 @@ class MaxCausalEntIRL(BaseIRL):
         
         # Get observed state visitation counts
         visited_states = np.zeros(mdp.n_states)
-
+        
+        # Get empirical state visitation counts
         for t in trajectories:
             for s in t:
                 visited_states[s] += 1
+            # Normalise
+            visited_states /= len(t)
+        # Normalise
+        visited_states /= len(trajectories)
 
         # Get observed feature visitation counts
         true_F = (mdp.features * visited_states).sum(axis=1).astype(float)
 
         # Remove ignored features
-        true_F[ignore_features] = 0
+        true_F[ignore_features] = 0       
 
         # Initial guess at reward function
         if self.theta is None:
@@ -266,10 +270,6 @@ class MFFeatureMatching(BaseIRL):
     def __init__(self):
         super().__init__()
 
-    def _solve_irl(self, theta:np.ndarray, phi:np.ndarray, ignore_features:List[int]):
-        theta[ignore_features] = 0
-        return -np.dot(theta, phi.T).sum()
-
     def fit(self, mdp:Union[MDP, List[MDP]], trajectories:List[List[int]], ignore_features:List[int]=[]):
 
         if not len(trajectories[0]):
@@ -287,9 +287,9 @@ class MFFeatureMatching(BaseIRL):
         for n, t in enumerate(trajectories):
             feature_array[n, :] = mdp[n].features[:, t[1:]].sum(axis=1)  # Exclude the first state of the trajectory as it's the start state which wasn't chosen
 
-        res = minimize(self._solve_irl, np.ones(mdp[0].n_features), (feature_array, ignore_features))
+        feature_array[ignore_features, :] = 0
 
-        self.theta = res.x
+        self.theta = feature_array.sum(axis=0)
 
         return self.theta
 
@@ -299,7 +299,7 @@ class HyptestIRL(BaseIRL):
     Hypothesis-testing inverse reinforcement learning (HT-IRL)
     """
 
-    def __init__(self, learning_rate:float=0.3, decay:int=1, theta:np.ndarray=None, 
+    def __init__(self, learning_rate:float=0.3, decay:int=1, theta:np.ndarray=None, asymmetry:float=2,
                  tol:float=1e-8, VI_discount:float=0.9, VI_max_iter:int=500, soft:bool=True, normalisation:str='relative'):
         """
         Infers an agent's reward function by testing discrete hypotheses regarding their preference for different
@@ -311,6 +311,8 @@ class HyptestIRL(BaseIRL):
             the learning rate decays on each trial according to learning rate * n^-decay.
             theta (np.ndarray, optional): Initial guess at reward function, if None this is set to 1 for each feature. 
             Defaults to None.
+            asymettry(float, optional): Asymmetry in learning rates. Learning rate for disconfirmatory results is multiplied by this,
+            learning rate for confirmatory results is halved by this value. Defaults to 2.
             tol (float, optional): Tolerance for convergence - shared across MCE-IRL and underlying value iteration. 
             Defaults to 1e-8.
             VI_discount (float, optional): Value iteration discount factor. Defaults to 0.9.
@@ -330,7 +332,9 @@ class HyptestIRL(BaseIRL):
         # Settings for IRL
         assert learning_rate > 0, 'Learning rate must be greater than zero'
         assert decay >= 0, 'Decay must be positive'
+        assert asymmetry > 1, 'Asymmetry must be 1 or greater'
         self.learning_rate = learning_rate
+        self.asymmetry = asymmetry
         self.learning_rate_decay = decay
         self.original_theta = np.array(theta).copy()
         self.theta = theta
@@ -452,7 +456,13 @@ class HyptestIRL(BaseIRL):
 
                 # Adjust learning rate
                 if self.learning_rate_decay > 0:
-                    R_ += (learning_rate * np.power(n_states, -float(self.learning_rate_decay))) * delta
+                    # R_ += (learning_rate * np.power(n_states, -float(self.learning_rate_decay))) * delta
+                    abs_delta = np.abs(R) - np.abs(R_)
+                    lr = np.ones_like(abs_delta) * learning_rate
+                    lr[abs_delta < 0] *= self.asymmetry
+                    lr[abs_delta >= 0] /= self.asymmetry
+                    lr = (lr * np.power(n_states, -float(self.learning_rate_decay)))
+                    R_ += lr * delta
 
                 # No learning rate adjustment
                 else:

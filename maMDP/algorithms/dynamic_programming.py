@@ -5,6 +5,7 @@ import warnings
 from scipy.optimize import minimize
 from numba import jit, njit, prange
 from typing import Union, Tuple
+
 from .base import Algorithm
 from ..mdp import MDP
 
@@ -118,7 +119,9 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
             values[s] = action_values.max()
         else:
             # Softmax (e.g. Bloem & Bambos, 2014)
-            values[s] = np.log(np.sum(np.exp(action_values) + 1e-200))  # Add a small amount here to avoid doing log(0) and getting -inf
+            valid_actions = np.argwhere(sas[s, ...])[:, 0]  # Ignore actions that the agent can't take
+            # action_values
+            values[s] = np.log(np.sum(np.exp(action_values)) + 1e-200)  # Add a small amount here to avoid doing log(0) and getting -inf
 
         # Update Q value for each action in this state
         q_values[s, :] = action_values
