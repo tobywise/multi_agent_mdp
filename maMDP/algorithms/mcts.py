@@ -92,15 +92,15 @@ def get_opponent_next_state(
                     reward_function, features, max_iter, discount, sas, tol
                 )
             elif algorithm == "sr":
-                # sr = get_sa_sr(sas, discount)
-                q_values = get_sr_q_values(reward_function.astype(np.float64), features, sr, sas.shape[0], sas.shape[1])
+                raise NotImplementedError
+                # q_values = get_sr_q_values(reward_function.astype(np.float64), features, sr, sas, sas.shape[0], sas.shape[1])
             else:
                 raise ValueError(
                     'Unknown algorithm, must be one of "value_iteration" or "sr"'
                 )
 
         # Get action
-        if action_selection == "max":
+        if action_selection == "max" or softmax_temperature == 0:
             max_actions = np.where(
                 q_values[current_state, :] == q_values[current_state, :].max()
             )[0]
@@ -111,6 +111,7 @@ def get_opponent_next_state(
             action_p = softmax(
                 q_values[current_state, :], temperature=softmax_temperature
             )
+
             action = rand_choice_nb(np.arange(len(action_p)), p=action_p)
             next_state = np.argmax(sas[current_state, action, :])
         else:
@@ -118,6 +119,8 @@ def get_opponent_next_state(
 
     else:
         raise NotImplementedError
+
+    assert np.any(sas[current_state, :, next_state] > 0), "Next state not in possible states"
 
     return next_state, q_values
 
@@ -912,7 +915,7 @@ class MCTS(Algorithm):
             self.cache = None
 
         if self.sr is None:
-            self.sr = get_sa_sr(mdp.sas, 0.9)
+            self.sr = get_sa_sr(mdp.sas, 0.99)
 
         # Get information about primary and other agents
         agent_info, opponent_info = self.create_agent_info(

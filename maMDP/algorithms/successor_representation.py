@@ -39,6 +39,7 @@ def get_sr_q_values(
     theta: np.ndarray,
     features: np.ndarray,
     sr: np.ndarray,
+    sas: np.ndarray,
     n_states: int,
     n_actions: int,
 ) -> np.ndarray:
@@ -49,7 +50,8 @@ def get_sr_q_values(
     Args:
         theta (np.ndarray): Reward weights, one entry per feature
         features (np.ndarray): Features
-        sr (np.ndarray): Successor representation. Each entry must represent a state-action
+        sr (np.ndarray): Successor representation. Each entry must represent a state-action pair.
+        sas (np.ndarray): State - action - state transitions.
         pair rather than a state.
         n_states (int): Number of states
         n_actions (int): Number of actions
@@ -67,5 +69,13 @@ def get_sr_q_values(
         sr, reward.repeat(n_actions)
     )  # Repeat so we have the same reward for each action in a state
     qs = qs.reshape((n_states, n_actions))
+
+    # Set invalid transitions to negative infinity
+    valid_transitions = sas.sum(axis=-1) == 0
+    
+    for s in range(n_states):
+        for a in range(n_actions):
+            if valid_transitions[s, a]:
+                qs[s, a] = -np.inf
 
     return qs
