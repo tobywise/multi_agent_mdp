@@ -5,6 +5,7 @@ from typing import Dict, Tuple, List, Union
 from .dynamic_programming import solve_value_iteration
 from .successor_representation import get_sa_sr, get_sr_q_values
 from ..mdp import MDP
+from .action_selection import softmax
 import warnings
 import time
 from operator import itemgetter
@@ -20,11 +21,6 @@ def rand_choice_nb(arr, p):
     """
     prob = p / p.sum()
     return arr[np.searchsorted(np.cumsum(prob), np.random.random(), side="right")]
-
-
-@njit
-def softmax(qs, temperature=1):
-    return (np.exp(qs / temperature)) / np.sum(np.exp(qs / temperature), axis=0)
 
 
 @njit
@@ -61,7 +57,7 @@ def get_opponent_next_state(
     Determines the next state of the opponent given the current state, the reward function, the features, the sas, and the opponent's policy method.
 
     Args:
-        opponent_policy_method (str): The method of the opponent's policy. Can be one of "random" or "solve". If random, the next state is chosen randomly. 
+        opponent_policy_method (str): The method of the opponent's policy. Can be one of "random" or "solve". If random, the next state is chosen randomly.
         If "solve", the next state is chosen according to the opponent's policy based on the given algorithm.
         states (list): Possible next states that can be reached from the current state.
         current_state (int): The current state.
@@ -84,7 +80,6 @@ def get_opponent_next_state(
         next_state = np.random.choice(states)
 
     elif opponent_policy_method == "solve":
-
         # Get q values, if not provided
         if q_values is None:
             if algorithm == "value_iteration":
@@ -111,7 +106,6 @@ def get_opponent_next_state(
             action_p = softmax(
                 q_values[current_state, :], temperature=softmax_temperature
             )
-
             action = rand_choice_nb(np.arange(len(action_p)), p=action_p)
             next_state = np.argmax(sas[current_state, action, :])
         else:
@@ -120,7 +114,9 @@ def get_opponent_next_state(
     else:
         raise NotImplementedError
 
-    assert np.any(sas[current_state, :, next_state] > 0), "Next state not in possible states"
+    assert np.any(
+        sas[current_state, :, next_state] > 0
+    ), "Next state is not reachable from current state"
 
     return next_state, q_values
 
