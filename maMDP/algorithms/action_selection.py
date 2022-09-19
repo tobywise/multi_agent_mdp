@@ -1,7 +1,9 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Union, Tuple
 import numpy as np
+from numba import njit
 
+@njit
 def softmax(qs, temperature=1):
 
     # No valid transitions
