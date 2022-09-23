@@ -272,6 +272,20 @@ class MDP():
         else:
             raise AttributeError("States are not adjacent")
 
+    def is_adjacent(self, s1:int, s2:int) -> bool:
+        """
+        Returns whether two states are adjacent.
+
+        Args:
+            s1 (int): State 1
+            s2 (int): State 2
+
+        Returns:
+            bool: Whether the states are adjacent
+        """
+
+        return np.any(self.sas[s1, :, s2] > 0)
+
     def state_valid_actions(self, state:int) -> np.ndarray:
         """
         Returns valid actions from a given state (i.e. actions that lead to another state).
