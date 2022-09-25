@@ -489,7 +489,8 @@ def mcts_iteration(
 
         if interactive:
             # SET WHO MOVES NEXT
-            print('Current actor = {0}, current moves = {1}, n_moves = {2}'.format(current_actor, current_moves[current_actor], n_moves[current_actor][current_turns[current_actor]]))
+            if verbose:
+                print('Current actor = {0}, current moves = {1}, n_moves = {2}'.format(current_actor, current_moves[current_actor], n_moves[current_actor][current_turns[current_actor]]))
             if current_moves[current_actor] == n_moves[current_actor][current_turns[current_actor]]:
                 # Reset moves to 0
                 current_moves[current_actor] = 0
