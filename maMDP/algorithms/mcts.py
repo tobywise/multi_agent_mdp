@@ -262,9 +262,10 @@ def mcts_iteration(
     softmax_temperature: float = 1,
     caching: bool = False,
     return_other_agent_states: bool = False,
+    verbose: bool = False,
     VI_max_iter: int = 500,
     VI_discount: float = 0.9,
-    VI_tol: float = 1e-4,
+    VI_tol: float = 1e-4
 ) -> Union[float, List[int]]:
     """
     Runs a single iteration of the MCTS algorithm, optionally including other agents' actions.
@@ -303,6 +304,7 @@ def mcts_iteration(
         VI_max_iter (int, optional): Number of iterations for value iteration. Defaults to 500.
         VI_discount (float, optional): Discount factor for value iteration. Defaults to 0.9
         VI_tol (float, optional): Tolerance for value iteration. Defaults to 1e-4.
+        verbose (bool, optional): If true, prints out information about the MCTS iteration. Defaults to False.
 
     Returns:
         Union[float, List[int], List[Dict[Tuple, np.ndarray]], List[List[Int]]]: Returns the accumulated value from this iteration and the states that were visited,
@@ -350,135 +352,144 @@ def mcts_iteration(
 
     while total_steps < n_steps:
 
-        # Set corresponding agent feature
-        features[agent_feature_idx[current_actor], :] = 0
-        features[agent_feature_idx[current_actor], current_node[current_actor]] = 1
+        # If this agent is supposed to be moving
+        if n_moves[current_actor][current_turns[current_actor]] > 0:
 
-        # Check whether any agents should be eaten
-        if interactive:
-            added_reward, agents_active, caught = check_agent_overlap(
-                consumes_agents, current_node, caught_cost, agents_active, agent_values
-            )
+            # Set corresponding agent feature
+            features[agent_feature_idx[current_actor], :] = 0
+            features[agent_feature_idx[current_actor], current_node[current_actor]] = 1
 
-            accumulated_reward += added_reward
-            if caught:
-                return (
-                    accumulated_reward,
-                    visited_states,
-                    cached_q_values,
-                    other_agent_visited_states,
+            # Check whether any agents should be eaten
+            if interactive:
+                added_reward, agents_active, caught = check_agent_overlap(
+                    consumes_agents, current_node, caught_cost, agents_active, agent_values
                 )
 
-        # Get actions and resulting states from current node for the current actor
-        _, _, states = get_actions_states(sas, current_node[current_actor])
+                accumulated_reward += added_reward
+                if caught:
+                    return (
+                        accumulated_reward,
+                        visited_states,
+                        cached_q_values,
+                        other_agent_visited_states,
+                    )
 
-        # PRIMARY AGENT'S TURN
-        # Get reward available in current state
-        if current_actor == 0:
-            # print('Stepping primary agent, total steps = ', total_steps)
-            # Recalculate rewards - may have changed as features are consumed
-            rewards = np.dot(reward_functions[0, :].astype(np.float64), features)
+            # Get actions and resulting states from current node for the current actor
+            _, _, states = get_actions_states(sas, current_node[current_actor])
 
-            # Get next node
-            current_node[0], expand = MCTS_next_node(
-                expand, V, N, states, C, current_node[0]
-            )
+            # PRIMARY AGENT'S TURN
+            # Get reward available in current state
+            if current_actor == 0:
+                if verbose:
+                    print('Stepping primary agent, total steps = ', total_steps)
+                # Recalculate rewards - may have changed as features are consumed
+                rewards = np.dot(reward_functions[0, :].astype(np.float64), features)
 
-            # Append to list of visited states
-            visited_states.append(current_node[0])
-
-            # Add reward to total
-            accumulated_reward += rewards[current_node[0]]
-
-        # OTHER AGENT'S TURN
-        elif interactive:
-            if agents_active[current_actor]:
-                # print('Stepping other agent, total steps = ', total_steps)
-                other_agent_nodes = current_node[
-                    np.arange(len(current_node)) != current_actor
-                ]
-                feature_consumption = tuple(
-                    itemgetter(*agent_preferences[current_actor])(consumed_features)
+                # Get next node
+                current_node[0], expand = MCTS_next_node(
+                    expand, V, N, states, C, current_node[0]
                 )
 
-                if (
-                    caching
-                    and (tuple(other_agent_nodes), feature_consumption)
-                    in cached_q_values[current_actor]
-                ):
-                    cache_used += 1
-                    current_node[current_actor], q_values = get_opponent_next_state(
-                        opponent_policy_method,
-                        states,
-                        current_node[current_actor],
-                        reward_functions[current_actor, :],
-                        features,
-                        sas,
-                        sr,
-                        opponent_algorithm,
-                        opponent_action_selection,
-                        softmax_temperature,
-                        max_iter=VI_max_iter,
-                        discount=VI_discount,
-                        tol=VI_tol,
-                        q_values=cached_q_values[current_actor][
-                            (tuple(other_agent_nodes), feature_consumption)
-                        ],
-                    )
-                else:
-                    current_node[current_actor], q_values = get_opponent_next_state(
-                        opponent_policy_method,
-                        states,
-                        current_node[current_actor],
-                        reward_functions[current_actor, :],
-                        features,
-                        sas,
-                        sr,
-                        opponent_algorithm,
-                        opponent_action_selection,
-                        softmax_temperature,
-                        max_iter=VI_max_iter,
-                        discount=VI_discount,
-                        tol=VI_tol,
-                        q_values=None,
-                    )
-                    if caching:
-                        cached_q_values[current_actor][
-                            (tuple(other_agent_nodes), feature_consumption)
-                        ] = q_values
+                # Append to list of visited states
+                visited_states.append(current_node[0])
 
-                if return_other_agent_states:
-                    other_agent_visited_states[current_actor - 1].append(
-                        current_node[current_actor]
+                # Add reward to total
+                accumulated_reward += rewards[current_node[0]]
+
+            # OTHER AGENT'S TURN
+            elif interactive:
+                if agents_active[current_actor]:
+                    if verbose:
+                        print('Stepping other agent, total steps = ', total_steps)
+                    other_agent_nodes = current_node[
+                        np.arange(len(current_node)) != current_actor
+                    ]
+                    feature_consumption = tuple(
+                        itemgetter(*agent_preferences[current_actor])(consumed_features)
                     )
 
-        # Consume features in this state
-        if agents_active[current_actor]:
-
-            # Keep a record of what's been consumed
-            if caching:
-                for f in np.where(consumes_features[current_actor, :])[0]:
-                    # Check there is something to consume
                     if (
-                        features[
-                            consumes_features[current_actor, :],
-                            current_node[current_actor],
-                        ]
-                        != 0
+                        caching
+                        and (tuple(other_agent_nodes), feature_consumption)
+                        in cached_q_values[current_actor]
                     ):
-                        consumed_features[f] = consumed_features[f] + (
+                        cache_used += 1
+                        current_node[current_actor], q_values = get_opponent_next_state(
+                            opponent_policy_method,
+                            states,
                             current_node[current_actor],
+                            reward_functions[current_actor, :],
+                            features,
+                            sas,
+                            sr,
+                            opponent_algorithm,
+                            opponent_action_selection,
+                            softmax_temperature,
+                            max_iter=VI_max_iter,
+                            discount=VI_discount,
+                            tol=VI_tol,
+                            q_values=cached_q_values[current_actor][
+                                (tuple(other_agent_nodes), feature_consumption)
+                            ],
+                        )
+                    else:
+                        current_node[current_actor], q_values = get_opponent_next_state(
+                            opponent_policy_method,
+                            states,
+                            current_node[current_actor],
+                            reward_functions[current_actor, :],
+                            features,
+                            sas,
+                            sr,
+                            opponent_algorithm,
+                            opponent_action_selection,
+                            softmax_temperature,
+                            max_iter=VI_max_iter,
+                            discount=VI_discount,
+                            tol=VI_tol,
+                            q_values=None,
+                        )
+                        if caching:
+                            cached_q_values[current_actor][
+                                (tuple(other_agent_nodes), feature_consumption)
+                            ] = q_values
+
+                    if return_other_agent_states:
+                        other_agent_visited_states[current_actor - 1].append(
+                            current_node[current_actor]
                         )
 
-            # Remove consumed feature from the feature array
-            features[
-                consumes_features[current_actor, :], current_node[current_actor]
-            ] = 0
+            # Consume features in this state
+            if agents_active[current_actor]:
 
-        current_moves[current_actor] += 1
+                # Keep a record of what's been consumed
+                if caching:
+                    for f in np.where(consumes_features[current_actor, :])[0]:
+                        # Check there is something to consume
+                        if (
+                            features[
+                                consumes_features[current_actor, :],
+                                current_node[current_actor],
+                            ]
+                            != 0
+                        ):
+                            consumed_features[f] = consumed_features[f] + (
+                                current_node[current_actor],
+                            )
+
+                # Remove consumed feature from the feature array
+                features[
+                    consumes_features[current_actor, :], current_node[current_actor]
+                ] = 0
+
+            current_moves[current_actor] += 1
+
+            # Count moves
+            total_steps += 1
 
         if interactive:
             # SET WHO MOVES NEXT
+            print('Current actor = {0}, current moves = {1}, n_moves = {2}'.format(current_actor, current_moves[current_actor], n_moves[current_actor][current_turns[current_actor]]))
             if current_moves[current_actor] == n_moves[current_actor][current_turns[current_actor]]:
                 # Reset moves to 0
                 current_moves[current_actor] = 0
@@ -492,8 +503,7 @@ def mcts_iteration(
                 else:
                     current_actor = 0
 
-        # Count moves
-        total_steps += 1
+
 
     return (
         accumulated_reward,
@@ -626,7 +636,8 @@ def run_mcts(
     cached_q_values: Dict = None,
     return_states: bool = False,
     return_other_agent_states: bool = False,
-    VI_kwargs: Dict = {},
+    verbose: bool = False,
+    VI_kwargs: Dict = {}
 ) -> Union[np.ndarray, np.ndarray]:
     """
     Runs the MCTS algorithm to determine the best action to take from the current state.
@@ -667,12 +678,15 @@ def run_mcts(
         cached_q_values (Dict, optional): Cached Q values, used to save recomputing for other agents if not necessary.
         return_states (bool, optional): If true, returns a record of the states visited. Defaults to False.
         return_other_agent_states (bool, optional): If true, returns a record of the states visited by other agents. Defaults to False.
+        verbose (bool, optional): If true, prints info. Defaults to False.
         VI_kwargs (Dict, optional): Keyword arguments to pass to the value iteration algorithm, if using. Defaults to {}.
 
     Returns:
         Union[np.ndarray, np.ndarray]: Returns the value of each state and the number of times each state has been visited.
     """
-    print("Running MCTS...")
+
+    if verbose:
+        print("Running MCTS...")
 
     start = time.time()
     (
@@ -734,6 +748,7 @@ def run_mcts(
             softmax_temperature,
             cache,
             return_other_agent_states,
+            verbose,
             **VI_kwargs
         )
 
@@ -747,7 +762,10 @@ def run_mcts(
             all_visited_states.append(visited_states)
         if return_other_agent_states:
             all_other_agent_visited_states.append(other_agent_visited_states)
-    print("MCTS took {} seconds".format(time.time() - start))
+
+    if verbose:
+        print("MCTS took {} seconds".format(time.time() - start))
+
     return V, N, cached_q_values, all_visited_states, all_other_agent_visited_states
 
 
@@ -817,7 +835,8 @@ class MCTS(Algorithm):
         reset_cache: bool = True,
         return_states: bool = False,
         return_other_agent_states: bool = False,
-        VI_kwargs: Dict = {},
+        verbose: bool = False,
+        VI_kwargs: Dict = {}
     ):
         """
         Args:
@@ -837,6 +856,7 @@ class MCTS(Algorithm):
             reset_cache (bool, optional): Whether to reset the cache when rerunning the algorithm. Defaults to False.
             return_states (bool, optional): If true, returns a record of the states visited. Defaults to False.
             return_other_agent_states (bool, optional): If true, returns a record of the states visited by other agents. Defaults to False.
+            verbose (bool, optional): Whether to print information. Defaults to False.
             VI_kwargs (Dict, optional): Arguments supplied to the opponent's value iteration algorithm. Defaults to {}.
         """
 
@@ -856,6 +876,7 @@ class MCTS(Algorithm):
         self.cache = None
         self.VI_kwargs = VI_kwargs
         self.sr = None
+        self.verbose = verbose
 
         super().__init__()
 
@@ -956,7 +977,8 @@ class MCTS(Algorithm):
             self.cache,
             self.return_states,
             self.return_other_agent_states,
-            self.VI_kwargs,
+            self.verbose,
+            self.VI_kwargs
         )
 
         # Get the value of available actions
