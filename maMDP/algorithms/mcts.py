@@ -64,6 +64,7 @@ def get_opponent_next_state(
         reward_function (np.ndarray): The reward function.
         features (np.ndarray): The features in the environment.
         sas (np.ndarray): The state-action-state matrix.
+        sr (np.ndarray): Precalculated successor representation - NOT IMPLEMENTED YET.
         algorithm (str, optional): Algorithm used to determine the policy, can be either "value iteration" or "sr" (successor representation). Defaults to 'value_iteration'.
         action_selection (str, optional): Action selection method, can be either "max" (greedy/max) or "softmax" (softmax). Defaults to 'max'.
         softmax_temperature (float, optional): Temperature for softmax action selection, if using. Defaults to 1.
@@ -243,17 +244,16 @@ def mcts_iteration(
     V: np.ndarray,
     N: np.ndarray,
     sas: np.ndarray,
-    sr,
+    sr: np.ndarray,
     features: np.ndarray,
     current_node: np.ndarray,
     cached_q_values: List[Dict[Tuple, np.ndarray]],
-    n_moves: Tuple[int],
+    n_moves: List[List[int]], 
     consumes_agents: np.ndarray,
     consumes_features: np.ndarray,
     agent_values: Tuple[float],
     reward_functions: np.ndarray,
     agent_feature_idx: List[int],
-    n_steps: int,
     C: float,
     caught_cost: float = -50,
     opponent_policy_method: str = "solve",
@@ -273,12 +273,14 @@ def mcts_iteration(
         interactive (bool): Whether the MDP is interactive (i.e. whether to include other agents' actions during planning)
         V (np.ndarray): Current estimate of state values.
         N (np.ndarray): Current number of visits for each state.
-        sas (np.ndarray): MDP transition function.
+        sas (np.ndarray): MDP transition function.  
+        sr (np.ndarray): Pre-calculated SR. NOT IMPLEMENTED YET.
         features (np.ndarray): MDP feature array.
         current_node (np.ndarray): Starting node for each agent.
         cached_q_values (List[Dict[Tuple, np.ndarray]]): Cached Q values, used to save recomputing for other agents
         if not necessary.
-        n_moves (Tuple[int]): Number of moves per turn for each agent.
+        n_moves (List[List[int]]): Number of moves per turn for each agent. A tuple where each entry is a tuple with each entry
+        representing the number of moves made on that turn.
         consumes_agents (np.ndarray): Which agents consume one another. Boolean array of shape (n agents X n agents), where true
         indicates agent X consumes agent Y.
         consumes_features (np.ndarray): Which agents consume which features. Boolean array of shape (n agents X n features), where true
@@ -286,7 +288,6 @@ def mcts_iteration(
         agent_values (Tuple[float]): Value of consuming each agent. Keys = agent names, values = value gained from consuming.
         reward_functions (np.ndarray): Reward function for each agent. Shape = (n_agents x n_features).
         agent_feature_idx (List[int]). Indices of features corresponding to each agent in the MDP.
-        n_steps (int): Number of moves made by the primary agent.
         C (float): Exploration parameter.
         caught_cost (float, optional): Cost incurred by the primary agent getting caught. Defaults to -50.
         opponent_policy_method (str, optional): Strategy used to simulate opponents' actions, one of ['random', 'solve']. If 'random',
@@ -303,11 +304,13 @@ def mcts_iteration(
         VI_discount (float, optional): Discount factor for value iteration. Defaults to 0.9
         VI_tol (float, optional): Tolerance for value iteration. Defaults to 1e-4.
 
-
     Returns:
         Union[float, List[int], List[Dict[Tuple, np.ndarray]], List[List[Int]]]: Returns the accumulated value from this iteration and the states that were visited,
         along with cached Q values.
     """
+
+    # Total number of steps is total number of moves in n_moves
+    n_steps = sum([sum(n) for n in n_moves])
 
     expand = True  # This determines whether we expand or simulate
     accumulated_reward = 0  # Total reward accumulated across all states
@@ -322,8 +325,11 @@ def mcts_iteration(
     for agent in range(1, n_agents):
         other_agent_visited_states.append([])
 
-    # Keep track of moves made ??
+    # Keep track of moves made
     current_moves = np.zeros(len(current_node))
+
+    # Keep track of turns taken
+    current_turns = np.zeros(len(current_node), dtype=int)
 
     # Keep track of which other agents have been eaten
     agents_active = np.ones(len(current_node), dtype=np.bool_)
@@ -340,11 +346,9 @@ def mcts_iteration(
 
     cache_used = 0
 
-    # Step through until agent has made as many steps as needed
-    # +1 to ensure that other agents make moves after the primary agent - this isn't ideal as it means the
-    # primary agent takes an extra step
+    # Step through until agents have made as many steps as needed
 
-    while total_steps < n_steps + 1:
+    while total_steps < n_steps:
 
         # Set corresponding agent feature
         features[agent_feature_idx[current_actor], :] = 0
@@ -371,7 +375,7 @@ def mcts_iteration(
         # PRIMARY AGENT'S TURN
         # Get reward available in current state
         if current_actor == 0:
-
+            # print('Stepping primary agent, total steps = ', total_steps)
             # Recalculate rewards - may have changed as features are consumed
             rewards = np.dot(reward_functions[0, :].astype(np.float64), features)
 
@@ -386,13 +390,10 @@ def mcts_iteration(
             # Add reward to total
             accumulated_reward += rewards[current_node[0]]
 
-            # Count moves
-            total_steps += 1
-
         # OTHER AGENT'S TURN
         elif interactive:
             if agents_active[current_actor]:
-                start = time.time()
+                # print('Stepping other agent, total steps = ', total_steps)
                 other_agent_nodes = current_node[
                     np.arange(len(current_node)) != current_actor
                 ]
@@ -478,14 +479,21 @@ def mcts_iteration(
 
         if interactive:
             # SET WHO MOVES NEXT
-            if current_moves[current_actor] == n_moves[current_actor]:
+            if current_moves[current_actor] == n_moves[current_actor][current_turns[current_actor]]:
                 # Reset moves to 0
                 current_moves[current_actor] = 0
+
+                # Update turn count
+                current_turns[current_actor] += 1
+
                 # Change actor
                 if current_actor < len(current_moves) - 1:
                     current_actor += 1
                 else:
                     current_actor = 0
+
+        # Count moves
+        total_steps += 1
 
     return (
         accumulated_reward,
@@ -519,7 +527,7 @@ def extract_agent_info(
 
     reward_functions = np.stack(reward_functions)
     current_node = np.array(current_node)
-    n_moves = tuple(n_moves)
+    n_moves = list(n_moves)
     consumes_features = np.stack(consumes_features).astype(bool)
 
     assert reward_functions.shape[0] == len(
@@ -607,8 +615,8 @@ def run_mcts(
     sr,
     agent_info: Dict[str, Tuple[int, int, List[int], np.ndarray, int]],
     opponent_info: Dict[str, Tuple[int, int, List[int], np.ndarray, int]],
-    n_steps: int,
     C: float,
+    n_moves: List[List[int]],
     caught_cost: float = -50,
     opponent_policy_method: str = "solve",
     opponent_algorithm: str = "value_iteration",
@@ -641,8 +649,12 @@ def run_mcts(
         opponent_info (Dict[str, Tuple[int, int, List[int], np.ndarray, int]]): Information about the other agents in the environment.
         This is given as a dictionary with keys representing the name of the agent, and values a tuple of the form
         (start state, n moves per turn, features to consume, reward function, agent index).
-        n_steps (int): Number of steps to run (i.e number of turns the primary agent should take).
         C (float): Exploration parameter.
+        n_moves (List[List[int]]): Number of moves each agent can take per turn. This is a tuple of tuples, where the first tuple
+        corresponds to the primary agent, and the remaining tuples correspond to the other agents. Within each tuple, the first
+        element is the number of moves the agent can take in the first turn, the second element is the number of moves for the
+        second turn, etc. If None, the n_steps argument is used to determine how many steps to simulate, and the number of moves
+        per turn is determined based on information present in the Agent classes.
         caught_cost (float, optional): Cost of the agent getting caught. Defaults to -50.
         opponent_policy_method (str, optional): Strategy used to simulate opponents' actions, one of ['random', 'solve']. If 'random',
         next state is chosen randomly.
@@ -661,16 +673,21 @@ def run_mcts(
         Union[np.ndarray, np.ndarray]: Returns the value of each state and the number of times each state has been visited.
     """
     print("Running MCTS...")
+
     start = time.time()
     (
         current_node,
-        n_moves,
+        extracted_n_moves,
         consumes_features,
         reward_functions,
         agent_values,
         consumes_agents,
         agent_idx,
     ) = extract_all_agent_info(agent_info, opponent_info)
+
+    # Only used the extracted number of moves if n_moves has not been specified
+    if n_moves is None:
+        n_moves = extracted_n_moves
 
     # Remove agent features
     features = features.copy()
@@ -709,7 +726,6 @@ def run_mcts(
             agent_values,
             reward_functions,
             agent_idx,
-            n_steps,
             C,
             caught_cost,
             opponent_policy_method,
@@ -892,11 +908,7 @@ class MCTS(Algorithm):
 
         return agent_info, opponent_info
 
-    def _fit(self, mdp, reward_function, position, n_steps):
-
-        start = time.time()
-        if n_steps is None:
-            n_steps = self.n_steps
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position:int, n_moves:Tuple[Tuple[int]]=None):
 
         # This requires an environment as it needs info about other agents
         if self._environment is None and self.interactive:
@@ -933,8 +945,8 @@ class MCTS(Algorithm):
             self.sr,
             agent_info,
             opponent_info,
-            n_steps,
             self.C,
+            n_moves,
             self.caught_cost,
             self.opponent_policy_method,
             self.opponent_algorithm,

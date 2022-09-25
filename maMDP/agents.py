@@ -27,7 +27,7 @@ class Agent():
             n_moves (int, optional): Number of moves the agent makes on each turn. This can be used for stepping through
             sequences of agents' turns in the environment, and can be used by planning algorithms that account for different
             agents' future actions. Defaults to 1.
-            algorithm (Algorithm, optional): The algorithm used to calcualte action values. Defaults to ValueIteration.
+            algorithm (Algorithm, optional): The algorithm used to calculate action values. Defaults to ValueIteration.
             algorithm_kwargs (Dict, optional): Keyword arguments for the algorithm. Defaults to {}.
             action_selector (ActionSelector, optional): Method used to select actions. Defaults to MaxActionSelector.
             action_kwargs (Dict, optional): Keyword arguments for action selection. Defaults to {}.
@@ -153,10 +153,10 @@ class AttachedAgent():
         self.pi_p = self.action_selector.get_pi_p(self.__algorithm.q_values)
         self.pi = self.action_selector.get_pi(self.__algorithm.q_values)
 
-    def fit(self, n_steps:bool=None, **kwargs):
+    def fit(self, n_moves:Tuple[Tuple[int]]=None, **kwargs):
 
         # Solve MDP
-        self.__algorithm.fit(self.__parent_mdp, self.reward_function, self.position, n_steps, **kwargs)
+        self.__algorithm.fit(self.__parent_mdp, self.reward_function, self.position, n_moves, **kwargs)
 
         # Get policy
         self.get_policy()
