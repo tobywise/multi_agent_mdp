@@ -260,8 +260,8 @@ class Environment:
 
         # Get agent names, making sure primary agent is first
         if primary_agent is not None:
-            agent_names = [agent_name] + [
-                i for i in self.agent_names if not i == agent_name
+            agent_names = [primary_agent] + [
+                i for i in self.agent_names if not i == primary_agent
             ]
         else:
             agent_names = self.agent_names
