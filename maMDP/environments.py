@@ -7,6 +7,43 @@ import warnings
 from copy import copy
 
 
+def get_n_moves_plan(
+    current_move: int, n_turns: int, n_moves: int, n_total_plan_moves: int
+) -> List[int]:
+    """
+    Determines the number of simulated moves to run for each simulated turn.
+
+    Args:
+        current_move (int): Current move. This should always be within the first turn.
+        n_turns (int): Number of turns.
+        n_moves (int): Number of moves per turn.
+        n_total_plan_moves (int): Total number of moves to plan ahead.
+
+    Returns:
+        List[int]: Number of simulated moves to run for each simulated turn.
+    """
+
+    if current_move >= n_moves:
+        raise ValueError(
+            f"current_move ({current_move}) must be less than n_moves ({n_moves})"
+        )
+
+    # Check that we don't have more planning moves than moves
+    assert n_total_plan_moves <= n_turns * n_moves
+
+    # Create an array of 1s and 0s, where 1s represent the planning moves
+    plan_array = np.zeros(n_turns * n_moves)
+    plan_array[current_move : current_move + n_total_plan_moves] = 1
+    n_moves_plan = [i.sum().astype(int) for i in np.split(plan_array, n_turns)]
+
+    assert sum(n_moves_plan) <= n_total_plan_moves
+
+    # Should have as many elements as turns
+    assert len(n_moves_plan) == n_turns
+
+    return n_moves_plan
+
+
 class Environment:
     def __init__(
         self,
@@ -130,7 +167,7 @@ class Environment:
                 )
             )
 
-    def fit(self, agent_name: str, n_moves: Tuple[Tuple[int]]):
+    def fit(self, agent_name: str, n_moves: Tuple[Tuple[int]] = None):
         """
         Calculates action values for a given agent.
 
@@ -219,15 +256,30 @@ class Environment:
 
         return caught
 
+    def _get_all_agents_n_steps(self, primary_agent:str=None):
+
+        # Get agent names, making sure primary agent is first
+        if primary_agent is not None:
+            agent_names = [agent_name] + [
+                i for i in self.agent_names if not i == agent_name
+            ]
+        else:
+            agent_names = self.agent_names
+
+        # Get number of moves for each agent and put in a list
+        n_agent_steps = [self.agents[i].n_moves for i in agent_names]
+
+        return n_agent_steps
+
+
     def step_multi(
         self,
         agent_name: str,
-        n_steps: int = None,
-        n_moves_plan: List[List[int]] = None,
+        n_steps: Union[int, List[int]] = None,
+        n_moves_plan: Tuple[int] = None,
         n_turns_plan: int = 1,
         refit: bool = False,
         progressbar: bool = False,
-        adjust_planning_steps: bool = True,
         stop_on_caught: bool = True,
     ) -> List[int]:
         """
@@ -235,86 +287,112 @@ class Environment:
 
         Args:
             agent_name (str): Name of the agent to step.
-            n_steps (int, optional): Number of steps to move. If None, the number of steps is taken as the number of steps defined
-            in the Agent.n_moves attribute. Defaults to None.
-            n_moves_plan (List[List[int]]): Used by simulation algorithms to determine how many steps to simulate for each agent.
-            This represents the number of moves each agent can take per turn. This is a list of list, where the first list
-            corresponds to the primary agent, and the remaining lists correspond to the other agents. Within each list, the first
-            element is the number of moves the agent can take in the first turn, the second element is the number of moves for the
-            second turn, etc. If None, the number of moves per turn is determined based on information present in the Agent classes
-            and the n_turns argument.
-            n_turns_plan (int, optional): Number of turns to simulate (used for simulation algorithms, otherwise ignored).
-            Only used if n_moves_plan is not specified. Defaults to 1.
+            n_steps (Union[int, List[int]], optional): Number of steps to move. If None, the number of steps is taken as the number of steps defined
+            in the Agent.n_moves attribute. If an int is given, this is taken as the number of steps for the agent being moved.
+            If the fitting algorithm requires information about moves made by other agents, this is inferred from the agent
+            specification. If a List of ints is provided, this is taken to represent the number of steps made by each agent, where
+            the first entry corresponds to the agent being moved. Defaults to None.
+            n_moves_plan (Tuple[int], optional): Number of future moves to simulate for each agent per turn. Used for simulation-based
+            planning algorithms that run simulations of multiple agents' future actions, such as MCTS. Should be a tuple of
+            integers, where the first integer corresponds to the primary agent, and the remaining integers correspond to the other
+            agents. Note that this is the number of moves being _simulated_ (not made), and these are the simulations being run
+            by the agent currently being moved (e.g., the primary agent may be simulating the moves of multiple other agents
+            when making their moves). This number will be adjusted based on the number of moves the agent is expected to make
+            (supplied via the `n_steps` and `n_turns_plan` arguments). So, for example, if the agent is expected to simulate its
+            own actions 6 steps in to the future (`n_moves_plan = 6`), and is is expected to take 3 turns (`n_turns_plan = 3`) of
+            4 moves each (`n_steps = 4`), then for the first move, the agent will simulate [4, 2, 0] steps per turn. For the
+            second move, the agent will simulate [3, 3, 0] steps per turn, and so on. If None, the number of moves per turn is
+            determined based on information present in the Agent classes and the n_turns argument. Note that this will only
+            take effect if `refit` is set to True. Defaults to None.
+            n_turns_plan (int, optional): Number of turns to simulate when planning (used for simulation algorithms,
+            otherwise ignored). Allows planning to account for future turns. Defaults to 1.
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error.
             Defaults to False.
             progressbar (bool, optional). If true, shows a progress bar. Defaults to False.
-            adjust_planning_steps (bool, optional). If true, the number of steps used for the planning algorithm (if it plans
-            for a set number of steps, like MCTS) is adjusted based on the number of steps the agent is expected to make (as set in the
-            `agent.n_moves` attribute or the `n_moves_plan` argument). If an int is provided, this represents the total expected
-            number of moves, and planning steps will only decrement once they go beyond this. For example, if `n_moves_plan` indicates
-            that the agent should plan 6 moves ahead but `adjust_planning_steps` is set to 10, the number of planning steps will
-            only be decremented after the 4th move. Defaults to True.
             stop_on_caught (bool, optional): If true, stops moving agents when one of them gets caught.
 
         Returns:
             List[int]: States the agent has moved to.
         """
 
-        # Get number of moves for each agent if not provided
+        # Check that this agent exists
+        self._check_agent_name(agent_name)
+
+        # Get number of steps made by each agent
+        n_agent_steps = self._get_all_agents_n_steps(primary_agent=agent_name)
+
+        # Get number of planning moves for each agent 
+        # If not provided this will just be the number of steps the agent is expected to make
         if n_moves_plan is None:
-            agent_names = [agent_name] + [
-                i for i in self.agent_names if not i == agent_name
-            ]  # Put primary agent first
-            n_moves_plan = [
-                [self.agents[i].n_moves] * n_turns_plan for i in agent_names
-            ]
+            # Get number of moves for each agent and put in a list
+            n_moves_plan = n_agent_steps
+        # Otherwise use the values provided
         else:
             n_moves_plan = copy(
                 n_moves_plan
             )  # avoid modifying the original that was provided
 
-        self._check_agent_name(agent_name)
-
-        if n_steps is None:
-            n_steps = self.agents[agent_name].n_moves
-
-        if n_moves_plan[0][0] < n_steps and refit and not adjust_planning_steps:
-            warnings.warn(
-                f"Number of planning moves for the first turn ({n_moves_plan[0][0]}) is less than the number of steps to move ({n_steps})."
+        # Check that n_moves_plan is a with the same length as the number of agents
+        if len(n_moves_plan) != len(self.agents):
+            raise ValueError(
+                f"Number of planning moves ({len(n_moves_plan)}) does not match number of agents ({len(self.agents)})."
             )
 
+        # If the number of steps isn't given, use the number of moves defined in the agent
+        if n_steps is None:
+            n_steps_primary_agent = self.agents[agent_name].n_moves
+        # If an int is given, use this as the number of steps for the primary agent
+        elif isinstance(n_steps, int):
+            n_steps_primary_agent = n_steps
+        # If a list is given, take the first value as the number of steps for the primary agent
+        elif isinstance(n_steps, list):
+            n_steps_primary_agent = n_steps[0]
+
+        # Check that number of planning moves for all agents is > 0
+        if not all([i > 0 for i in n_moves_plan]):
+            raise ValueError(
+                f"Number of planning moves for all agents must be greater than 0. Got {n_moves_plan}."
+            )
+
+        # Progress bars
         if progressbar:
-            steps = progress_bar(range(n_steps))
+            steps = progress_bar(range(n_steps_primary_agent))
         else:
-            steps = range(n_steps)
-
-        primary_agent_total_planning_moves = sum(n_moves_plan[0])
-
+            steps = range(n_steps_primary_agent)
+        
+        # List to store position history
         positions = []
+
+        # Loop over steps
         for i in steps:
             if refit:
-                if adjust_planning_steps == True:
-                    if n_moves_plan[0][0] > 1:
-                        n_moves_plan[0][0] -= 1  # Adjust number of moves for the first turn
-                    else:
-                        warnings.warn(
-                            "Number of planning moves for the first turn is already 1. Cannot adjust planning steps."
+                
+                # Get number of moves to plan for this step
+                step_n_moves_plan = []
+
+                # Distribute planning moves across turns
+                for j, n_moves in enumerate(n_moves_plan):
+                    if j == 0:
+                        step_n_moves_plan.append(
+                            get_n_moves_plan(
+                                i,
+                                n_turns_plan,
+                                n_steps,
+                                n_moves
+                            )
                         )
-                    self.fit(agent_name, n_moves=n_moves_plan)
-
-                # If int, decrement value until it reaches the number of steps to move
-                # TODO check this works, it might not...
-                elif isinstance(adjust_planning_steps, int):
-                    self.fit(agent_name, n_moves=n_moves_plan)
-
-                    if adjust_planning_steps == primary_agent_total_planning_moves:
-                        adjust_planning_steps = True
                     else:
-                        adjust_planning_steps -= 1
-
-                else:
-                    self.fit(agent_name, n_moves=n_moves_plan)
+                        step_n_moves_plan.append(
+                            get_n_moves_plan(
+                                0,  # don't adjust for turns when simulating other agents
+                                n_turns_plan,
+                                n_steps,
+                                n_moves
+                            )
+                        )
+                # Fit
+                self.fit(agent_name, n_moves=n_moves_plan)
 
             self.step(agent_name)
             positions.append(self.agents[agent_name].position)
@@ -350,12 +428,18 @@ class Environment:
             element is the number of moves the agent can take in the first turn, the second element is the number of moves for the
             second turn, etc. If None, the number of moves per turn is determined based on information present in the Agent classes
             and the n_turns argument.
-            n_moves_plan (Tuple[Tuple[int]]): Used by simulation algorithms to determine how many steps to simulate for each agent.
-            This represents the number of moves each agent can take per turn. This is a tuple of tuples, where the first tuple
-            corresponds to the primary agent, and the remaining tuples correspond to the other agents. Within each tuple, the first
-            element is the number of moves the agent can take in the first turn, the second element is the number of moves for the
-            second turn, etc. If None, the n_steps argument is used to determine how many steps to simulate, and the number of moves
-            per turn is determined based on information present in the Agent classes.
+            n_moves_plan (Tuple[int], optional): Number of future moves to simulate for each agent per turn. Used for simulation-based
+            planning algorithms that run simulations of multiple agents' future actions, such as MCTS. Should be a tuple of
+            integers, where the first integer corresponds to the primary agent, and the remaining integers correspond to the other
+            agents. Note that this is the number of moves being _simulated_ (not made), and these are the simulations being run
+            by the agent currently being moved (e.g., the primary agent may be simulating the moves of multiple other agents
+            when making their moves). This number will be adjusted based on the number of moves the agent is expected to make
+            (supplied via the `n_steps` and `n_turns_plan` arguments). So, for example, if the agent is expected to simulate its
+            own actions 6 steps in to the future (`n_moves_plan = 6`), and is is expected to take 3 turns (`n_turns_plan = 3`) of
+            4 moves each (`n_steps = 4`), then for the first move, the agent will simulate [4, 2, 0] steps per turn. For the
+            second move, the agent will simulate [3, 3, 0] steps per turn, and so on. If None, the number of moves per turn is
+            determined based on information present in the Agent classes and the n_turns argument. Note that this will only
+            take effect if `refit` is set to True. Defaults to None.
             refit (bool, optional). If true, refits the action value estimation every step. This is useful for online models,
             which only estimate values for actions that can be taken from the current state, and would otherwise raise an error.
             Defaults to False.
@@ -374,9 +458,7 @@ class Environment:
             agent_names = [agent_name] + [
                 i for i in self.agent_names if not i == agent_name
             ]  # Put primary agent first
-            n_moves = [
-                [[self.agents[i].n_moves] * n_turns for i in agent_names]
-            ]
+            n_moves = [[[self.agents[i].n_moves] * n_turns for i in agent_names]]
         else:
             n_moves = copy(n_moves)  # avoid modifying the original that was provided
             n_turns = len(n_moves[0])  # Get number of turns from n_moves
@@ -411,6 +493,7 @@ class Environment:
                     agent_steps[agent_name],
                     refit=refit,
                     n_steps=n_moves[n][t],
+                    n_turns_plan=n_turns - t,
                     n_moves_plan=n_moves_plan,
                     adjust_planning_steps=adjust_planning_steps,
                     stop_on_caught=stop_on_caught,
@@ -425,8 +508,7 @@ class Environment:
                     adjust_planning_steps -= n_moves[n][t]
 
                 # Update number of planning moves for each agent
-                n_moves_plan[n] = n_moves_plan[n][t+1:]
-                
+                n_moves_plan[n] = n_moves_plan[n][t + 1 :]
 
     def reset(self):
         """
