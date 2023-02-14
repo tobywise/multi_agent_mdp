@@ -28,14 +28,13 @@ def get_n_moves_plan(
             f"current_move ({current_move}) must be less than n_moves ({n_moves})"
         )
 
-    # Check that we don't have more planning moves than moves
-    assert n_total_plan_moves <= n_turns * n_moves
-
     # Create an array of 1s and 0s, where 1s represent the planning moves
     plan_array = np.zeros(n_turns * n_moves)
     plan_array[current_move : current_move + n_total_plan_moves] = 1
     n_moves_plan = [i.sum().astype(int) for i in np.split(plan_array, n_turns)]
 
+    # if not sum(n_moves_plan) <= n_total_plan_moves:
+    #     print(n_moves_plan, n_total_plan_moves, current_move, n_turns, n_moves)
     assert sum(n_moves_plan) <= n_total_plan_moves
 
     # Should have as many elements as turns
@@ -378,7 +377,7 @@ class Environment:
                             get_n_moves_plan(
                                 i,
                                 n_turns_plan,
-                                n_steps,
+                                n_agent_steps[j],
                                 n_moves
                             )
                         )
@@ -387,12 +386,12 @@ class Environment:
                             get_n_moves_plan(
                                 0,  # don't adjust for turns when simulating other agents
                                 n_turns_plan,
-                                n_steps,
+                                n_agent_steps[j],
                                 n_moves
                             )
                         )
                 # Fit
-                self.fit(agent_name, n_moves=n_moves_plan)
+                self.fit(agent_name, n_moves=step_n_moves_plan)
 
             self.step(agent_name)
             positions.append(self.agents[agent_name].position)
