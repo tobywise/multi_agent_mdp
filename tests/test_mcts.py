@@ -53,7 +53,7 @@ def test_extract_agent_info(example_agent_info):
 
     assert agent_idx == {2: 0}
     assert current_node == np.array([2])
-    assert n_moves == (3, )
+    assert n_moves == [3]
 
     expected_consumes_features = np.zeros((1, 5))
     expected_consumes_features[0, [1, 4]] = 1

@@ -3,6 +3,7 @@ from ..environments import Environment
 import numpy as np
 from ..mdp import MDP
 import warnings
+from typing import Tuple
 
 class Algorithm(metaclass=ABCMeta):
 
@@ -21,17 +22,21 @@ class Algorithm(metaclass=ABCMeta):
         self._agent = agent
         self._environment = environment
 
-    def fit(self, mdp:MDP, reward_function:np.ndarray, position:int, n_steps:int,  *args, **kwargs):
+    def fit(self, mdp:MDP, reward_function:np.ndarray, position:int, n_moves:Tuple[Tuple[int]]=None,  *args, **kwargs):
         """
         Runs the algorithm to determine the value of different actions.
 
         Args:
             mdp (MDP): The MDP containing states and actions.
             reward_function (np.ndarray): The reward function used to determine state values.
-            n_steps (int, optional): Number of steps to plan ahead, if used by the algorithm. Can be int or None.
             position (int): Current position of the agent (i.e. the state it is currently in). Used for online algorithms.
+            n_moves (Tuple[Tuple[int]]): Used by simulation algorithms to determine how many steps to simulate for each agent.
+            This represents the number of moves each agent can take per turn. This is a tuple of tuples, where the first tuple
+            corresponds to the primary agent, and the remaining tuples correspond to the other agents. Within each tuple, the first
+            element is the number of moves the agent can take in the first turn, the second element is the number of moves for the
+            second turn, etc. If None, the n_steps argument is used to determine how many steps to simulate, and the number of moves
+            per turn is determined based on information present in the Agent classes.
         """
-
         # Check inputs
         if not isinstance(reward_function, np.ndarray) or isinstance(reward_function, list):
             raise TypeError('Reward function must be a 1D array or list, got type {0}'.format(reward_function))
@@ -43,7 +48,7 @@ class Algorithm(metaclass=ABCMeta):
             raise AttributeError("Reward function should have as many entries as the MDP has features")
 
         # Use the fit method
-        values, q_values = self._fit(mdp, reward_function, position, n_steps, *args, **kwargs)
+        values, q_values = self._fit(mdp, reward_function, position, n_moves, *args, **kwargs)
 
         # Check outputs before accepting them
         assert isinstance(values, np.ndarray), 'Values should be in the form of a numpy array'
@@ -64,7 +69,7 @@ class Algorithm(metaclass=ABCMeta):
         self.q_values = q_values
 
     @abstractmethod
-    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps, *args, **kwargs):
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_moves, *args, **kwargs):
         """ Fit the algorithm 
         Must return numpy arrays representing:
         1) State values (value function): 1D array (n_states, )
@@ -94,7 +99,7 @@ class Null(Algorithm):
     Implements a null planning model which estimates all state values and Q values to be 1.
     """
 
-    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps):
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_moves):
 
         state_vawlues = np.ones(mdp.n_states)
         q_values = np.ones((mdp.n_states, mdp.n_actions))

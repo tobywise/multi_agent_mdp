@@ -219,7 +219,7 @@ class ValueIteration(Algorithm):
         return values, q_values
 
 
-    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_steps) -> Union[np.ndarray, np.ndarray]:
+    def _fit(self, mdp:MDP, reward_function:np.ndarray, position, n_moves) -> Union[np.ndarray, np.ndarray]:
         """
         Uses value iteration to solve the MDP
 
