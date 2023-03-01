@@ -332,6 +332,10 @@ def plot_hex_grid_values(
     cmap: str = "viridis",
     ax=None,
     hide_idx: List[Tuple[int]] = None,
+    edgecolor: str = "#787878",
+    edgewidth: float = 0.5,
+    hex_args=[],
+    hex_kwargs={},
     *args,
     **kwargs
 ) -> plt.axes:
@@ -356,7 +360,8 @@ def plot_hex_grid_values(
 
     # Plot  grid
     draw_hexagons(
-        colour_array, linewidth=0, ax=ax, return_coords=False, hide_idx=hide_idx
+        colour_array, linewidth=0, ax=ax, return_coords=False, hide_idx=hide_idx,
+        *hex_args, **hex_kwargs
     )
 
     coords = draw_hexagons(
@@ -364,7 +369,10 @@ def plot_hex_grid_values(
         ax=ax,
         facecolor=(0, 0, 0, 0),
         return_coords=True,
-        hide_idx=hide_idx
+        hide_idx=hide_idx,
+        edgecolor=edgecolor,
+        linewidth=edgewidth,
+        *hex_args, **hex_kwargs
     )
     ax.set_xticks(np.arange(-0.5, grid.shape[0], 1))
     ax.set_yticks(np.arange(-0.5, grid.shape[1], 1))

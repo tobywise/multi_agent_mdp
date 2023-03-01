@@ -381,7 +381,7 @@ def mcts_iteration(
             # Get reward available in current state
             if current_actor == 0:
                 if verbose:
-                    print('Stepping primary agent, total steps = ', total_steps)
+                    print('Stepping primary agent, total steps = {0}. Current node = {1}'.format(total_steps, current_node[0]))
                 # Recalculate rewards - may have changed as features are consumed
                 rewards = np.dot(reward_functions[0, :].astype(np.float64), features)
 
@@ -400,7 +400,7 @@ def mcts_iteration(
             elif interactive:
                 if agents_active[current_actor]:
                     if verbose:
-                        print('Stepping other agent, total steps = ', total_steps)
+                        print('Stepping other agent, total steps = {0}. Current node = {1}'.format(total_steps, current_node[current_actor]))
                     other_agent_nodes = current_node[
                         np.arange(len(current_node)) != current_actor
                     ]

@@ -33,8 +33,6 @@ def get_n_moves_plan(
     plan_array[current_move : current_move + n_total_plan_moves] = 1
     n_moves_plan = [i.sum().astype(int) for i in np.split(plan_array, n_turns)]
 
-    # if not sum(n_moves_plan) <= n_total_plan_moves:
-    #     print(n_moves_plan, n_total_plan_moves, current_move, n_turns, n_moves)
     assert sum(n_moves_plan) <= n_total_plan_moves
 
     # Should have as many elements as turns
@@ -291,7 +289,7 @@ class Environment:
             If the fitting algorithm requires information about moves made by other agents, this is inferred from the agent
             specification. If a List of ints is provided, this is taken to represent the number of steps made by each agent, where
             the first entry corresponds to the agent being moved. Defaults to None.
-            n_moves_plan (Tuple[int], optional): Number of future moves to simulate for each agent per turn. Used for simulation-based
+            n_moves_plan (Tuple[int], optional): Total number of future moves to simulate for each agent. Used for simulation-based
             planning algorithms that run simulations of multiple agents' future actions, such as MCTS. Should be a tuple of
             integers, where the first integer corresponds to the primary agent, and the remaining integers correspond to the other
             agents. Note that this is the number of moves being _simulated_ (not made), and these are the simulations being run
