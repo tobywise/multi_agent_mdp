@@ -27,4 +27,5 @@ setup(
     extras_require={  
         'test': ['pytest'],
     },
+    zip_safe=False,
 )
