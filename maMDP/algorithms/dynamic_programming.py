@@ -9,7 +9,7 @@ from typing import Union, Tuple
 from .base import Algorithm
 from ..mdp import MDP
 
-@njit
+@njit(cache=True)
 def get_state_action_values(s:int, n_actions:int, sas:np.ndarray, reward:np.ndarray, 
                             discount:float, values:np.ndarray) -> np.ndarray:
     """
@@ -45,7 +45,7 @@ def get_state_action_values(s:int, n_actions:int, sas:np.ndarray, reward:np.ndar
 
     return action_values
 
-@njit
+@njit(cache=True)
 def delta_update(delta:float, old_v:float, new_v:float) -> float:
     """
     Calculates delta (difference between state value estimate for current
@@ -68,7 +68,7 @@ def delta_update(delta:float, old_v:float, new_v:float) -> float:
     return delta
     
 
-@njit
+@njit(cache=True)
 def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray, 
                          discount:float, sas:np.ndarray, soft=False) -> Tuple[np.ndarray, float, np.ndarray]:
     """
@@ -131,7 +131,7 @@ def state_value_iterator(values:np.ndarray, delta:float, reward:np.ndarray,
 
     return values, delta, q_values
 
-@njit
+@njit(cache=True)
 def solve_value_iteration(reward_function:np.ndarray, features:np.ndarray, max_iter:int, 
                           discount:float, sas:np.ndarray, tol:float, soft=False) -> Tuple[np.ndarray, np.ndarray]:
     """
